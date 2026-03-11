@@ -42,9 +42,11 @@ htmlcov/
 # 大文件（不上传）
 test_data/raw/*.cns
 test_data/raw/tb_h37rv.fasta
-data/*.fasta
-data/*.list
-!data/.gitkeep
+
+# 参考数据（上传）
+!data/tb_h37rv.fasta
+!data/tb.ancestor.fasta
+!data/PPE_INS_loci_Rv.list
 
 # VarScan（用户自行下载）
 scripts/VarScan.v2.3.9.jar
