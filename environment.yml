@@ -1,7 +1,7 @@
 name: mtb-evo
 channels:
-  - bioconda
   - conda-forge
+  - bioconda
   - defaults
 dependencies:
   - python=3.9
@@ -14,11 +14,12 @@ dependencies:
   - fasttree
   # Perl
   - perl
-  # Python packages
-  - biopython=1.81
-  - typer
-  - pydantic
-  - pyyaml
+  # Python packages (使用 pip 安装避免 channel 冲突)
+  - pip:
+    - biopython==1.81
+    - typer
+    - pydantic
+    - pyyaml
   # Development
   - pytest
   - black
