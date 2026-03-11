@@ -1,0 +1,25 @@
+name: mtb-evo
+channels:
+  - bioconda
+  - conda-forge
+  - defaults
+dependencies:
+  - python>=3.9
+  - pip
+  # Bioinformatics tools
+  - sickle-trim
+  - bowtie2
+  - samtools
+  - varscan
+  - fasttree
+  # Perl
+  - perl
+  # Python packages
+  - biopython
+  - typer
+  - pydantic
+  - pyyaml
+  # Development
+  - pytest
+  - black
+  - ruff

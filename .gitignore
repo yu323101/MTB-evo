@@ -1,0 +1,59 @@
+# Python
+__pycache__/
+*.py[cod]
+*$py.class
+*.so
+.Python
+build/
+develop-eggs/
+dist/
+downloads/
+eggs/
+.eggs/
+lib/
+lib64/
+parts/
+sdist/
+var/
+wheels/
+*.egg-info/
+.installed.cfg
+*.egg
+
+# 虚拟环境
+venv/
+ENV/
+env/
+
+# IDE
+.vscode/
+.idea/
+*.swp
+*.swo
+*~
+
+# 测试相关（保留代码，忽略输出）
+tests/__pycache__/
+tests/*.pyc
+.pytest_cache/
+.coverage
+htmlcov/
+
+# 大文件（不上传）
+test_data/raw/*.cns
+test_data/raw/tb_h37rv.fasta
+data/*.fasta
+data/*.list
+!data/.gitkeep
+
+# VarScan（用户自行下载）
+scripts/VarScan.v2.3.9.jar
+
+# 输出结果
+results/
+*.log
+nohup.out
+
+# 系统文件
+.DS_Store
+Thumbs.db
