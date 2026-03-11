@@ -4,7 +4,7 @@ channels:
   - conda-forge
   - defaults
 dependencies:
-  - python>=3.9
+  - python=3.9
   - pip
   # Bioinformatics tools
   - sickle-trim
@@ -15,7 +15,7 @@ dependencies:
   # Perl
   - perl
   # Python packages
-  - biopython
+  - biopython=1.81
   - typer
   - pydantic
   - pyyaml
