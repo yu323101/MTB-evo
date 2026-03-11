@@ -105,7 +105,9 @@ def recall_genotype(
 
             # Filter 5-7: Frequency-based genotype determination
             try:
-                freq = int(float(freq_str))  # Handle float frequencies like 99.86
+                # Remove % symbol if present and convert to int
+                freq_clean = freq_str.rstrip('%')
+                freq = int(float(freq_clean))
             except ValueError:
                 genotype[pos] = "N"
                 continue
