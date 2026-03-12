@@ -57,7 +57,7 @@ def check_bowtie2_index(ref_fasta, bowtie2_path):
     script_dir = Path(__file__).parent
     index_dir = script_dir.parent / "data" / "bowtie2_index"
     index_prefix = index_dir / "tb_h37rv.fasta"
-    
+
     # Check if index files exist
     index_files = [
         f"{index_prefix}.1.bt2",
@@ -67,25 +67,35 @@ def check_bowtie2_index(ref_fasta, bowtie2_path):
         f"{index_prefix}.rev.1.bt2",
         f"{index_prefix}.rev.2.bt2"
     ]
-    
+
     index_exists = all(Path(f).exists() for f in index_files)
-    
+
     if not index_exists:
         print("Bowtie2 index not found in data/bowtie2_index/")
         response = input("Create index now? This may take a few minutes. (y/n): ")
-        
+
         if response.lower() == 'y':
             print("Creating bowtie2 index...")
             index_dir.mkdir(parents=True, exist_ok=True)
-            
+
+            # Find bowtie2-build command
+            bowtie2_build = shutil.which('bowtie2-build')
+            if not bowtie2_build:
+                # Fallback: try to find it in the same directory as bowtie2
+                bowtie2_dir = Path(bowtie2_path).parent
+                bowtie2_build = str(bowtie2_dir / 'bowtie2-build')
+                if not Path(bowtie2_build).exists():
+                    print("Error: bowtie2-build not found in PATH")
+                    print("Please ensure bowtie2 is properly installed")
+                    sys.exit(1)
+
             import subprocess
             cmd = [
-                bowtie2_path,
-                "-build",
+                bowtie2_build,
                 ref_fasta,
                 str(index_prefix)
             ]
-            
+
             try:
                 result = subprocess.run(cmd, check=True, capture_output=True, text=True)
                 print("Index created successfully!")
@@ -99,7 +109,7 @@ def check_bowtie2_index(ref_fasta, bowtie2_path):
             print(f"  mkdir -p data/bowtie2_index")
             print(f"  bowtie2-build {ref_fasta} data/bowtie2_index/tb_h37rv.fasta")
             sys.exit(1)
-    
+
     return str(index_prefix)
 
 
