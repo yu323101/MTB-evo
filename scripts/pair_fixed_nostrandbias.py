@@ -2,13 +2,15 @@
 """
 Generate SNP calling pipeline script with auto-detected tool paths.
 
-Usage: python3 pair_fixed_nostrandbias.py <strain_list.txt>
+Usage: python3 pair_fixed_nostrandbias.py <strain_list.txt> [--threads N] [--sort-threads N]
 
 Example strain list format:
 MD601.cleaned
 MD602.cleaned
 """
 
+import argparse
+import os
 import shutil
 import sys
 from pathlib import Path
@@ -113,12 +115,46 @@ def check_bowtie2_index(ref_fasta, bowtie2_path):
     return str(index_prefix)
 
 
+def get_default_threads():
+    """Get default thread count (50% of CPU cores)."""
+    try:
+        cpu_count = os.cpu_count() or 4
+        return max(1, cpu_count // 2)
+    except:
+        return 4
+
+
 def main():
-    if len(sys.argv) != 2:
-        print("Usage: python3 pair_fixed_nostrandbias.py <strain_list.txt>")
-        sys.exit(1)
+    parser = argparse.ArgumentParser(
+        description='Generate SNP calling pipeline script',
+        formatter_class=argparse.RawDescriptionHelpFormatter,
+        epilog="""
+Examples:
+  python3 pair_fixed_nostrandbias.py samples.txt
+  python3 pair_fixed_nostrandbias.py samples.txt --threads 16
+  python3 pair_fixed_nostrandbias.py samples.txt --threads 16 --sort-threads 8
+        """
+    )
     
-    strain_list_file = sys.argv[1]
+    parser.add_argument('strain_list', help='File containing list of strains')
+    parser.add_argument(
+        '--threads', '-t',
+        type=int,
+        default=get_default_threads(),
+        help=f'Number of threads for bowtie2 (default: {get_default_threads()}, 50%% of CPU cores)'
+    )
+    parser.add_argument(
+        '--sort-threads', '-s',
+        type=int,
+        default=None,
+        help='Number of threads for samtools sort (default: threads/2)'
+    )
+    
+    args = parser.parse_args()
+    
+    strain_list_file = args.strain_list
+    bowtie_threads = args.threads
+    sort_threads = args.sort_threads or max(1, bowtie_threads // 2)
     
     # Auto-detect tool paths
     print("Detecting tools...")
@@ -192,16 +228,16 @@ def main():
             step1 = f"{tools['sickle']} pe -t sanger -f {strain}_1.fastq.gz -r {strain}_2.fastq.gz -o {strain}_1.fastq -p {strain}_2.fastq -s {strain}_s.fastq\n"
             out.write(step1)
             
-            # Step 2: Alignment with bowtie2
-            step2 = f"{tools['bowtie2']} -x {bowtie2_index} -1 {strain}_1.fastq -2 {strain}_2.fastq -U {strain}_s.fastq -S {strain}.sam\n"
+            # Step 2: Alignment with bowtie2 (multi-threaded)
+            step2 = f"{tools['bowtie2']} -p {bowtie_threads} -x {bowtie2_index} -1 {strain}_1.fastq -2 {strain}_2.fastq -U {strain}_s.fastq -S {strain}.sam\n"
             out.write(step2)
-            
+
             # Step 3: Convert SAM to BAM
             step3 = f"{tools['samtools']} view -bhSt {ref_fai} {strain}.sam -o {strain}.paired.bam\n"
             out.write(step3)
-            
-            # Step 4: Sort BAM
-            step4 = f"{tools['samtools']} sort {strain}.paired.bam -o {strain}.sort.bam\n"
+
+            # Step 4: Sort BAM (multi-threaded)
+            step4 = f"{tools['samtools']} sort -@ {sort_threads} {strain}.paired.bam -o {strain}.sort.bam\n"
             out.write(step4)
             
             # Step 5: Calculate depth and call variants
@@ -236,6 +272,8 @@ fi
     
     print(f"Generated {output_file}")
     print(f"  Strains: {len(strains)}")
+    print(f"  Bowtie2 threads: {bowtie_threads}")
+    print(f"  Samtools sort threads: {sort_threads}")
     print()
     print("To run the pipeline:")
     print("  cd results && bash pair_end.sh")
