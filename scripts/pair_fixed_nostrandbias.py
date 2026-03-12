@@ -222,47 +222,51 @@ Examples:
         out.write(f"echo 'Processing {len(strains)} strains'\n\n")
         
         for i, strain in enumerate(strains, 1):
+            # Extract basename from full path
+            strain_name = os.path.basename(strain)
+            
             out.write(f"echo '[{i}/{len(strains)}] Processing {strain}...'\n")
             
             # Step 1: Quality trimming with sickle
-            step1 = f"{tools['sickle']} pe -t sanger -f {strain}_1.fastq.gz -r {strain}_2.fastq.gz -o {strain}_1.fastq -p {strain}_2.fastq -s {strain}_s.fastq\n"
+            # Input uses full path, output goes to results/
+            step1 = f"{tools['sickle']} pe -t sanger -f {strain}_1.fastq.gz -r {strain}_2.fastq.gz -o results/{strain_name}_1.fastq -p results/{strain_name}_2.fastq -s results/{strain_name}_s.fastq\n"
             out.write(step1)
             
             # Step 2: Alignment with bowtie2 (multi-threaded)
-            step2 = f"{tools['bowtie2']} -p {bowtie_threads} -x {bowtie2_index} -1 {strain}_1.fastq -2 {strain}_2.fastq -U {strain}_s.fastq -S {strain}.sam\n"
+            step2 = f"{tools['bowtie2']} -p {bowtie_threads} -x {bowtie2_index} -1 results/{strain_name}_1.fastq -2 results/{strain_name}_2.fastq -U results/{strain_name}_s.fastq -S results/{strain_name}.sam\n"
             out.write(step2)
 
             # Step 3: Convert SAM to BAM
-            step3 = f"{tools['samtools']} view -bhSt {ref_fai} {strain}.sam -o {strain}.paired.bam\n"
+            step3 = f"{tools['samtools']} view -bhSt {ref_fai} results/{strain_name}.sam -o results/{strain_name}.paired.bam\n"
             out.write(step3)
 
             # Step 4: Sort BAM (multi-threaded)
-            step4 = f"{tools['samtools']} sort -@ {sort_threads} {strain}.paired.bam -o {strain}.sort.bam\n"
+            step4 = f"{tools['samtools']} sort -@ {sort_threads} results/{strain_name}.paired.bam -o results/{strain_name}.sort.bam\n"
             out.write(step4)
             
             # Step 5: Calculate depth and call variants
-            step5 = f"""depth=$({tools['samtools']} depth {strain}.sort.bam | awk '{{s+=$3}}END{{print s/NR}}')
-coverage=$({tools['samtools']} depth {strain}.sort.bam | awk 'END{{print NR/4411532}}')
+            step5 = f"""depth=$({tools['samtools']} depth results/{strain_name}.sort.bam | awk '{{s+=$3}}END{{print s/NR}}')
+coverage=$({tools['samtools']} depth results/{strain_name}.sort.bam | awk 'END{{print NR/4411532}}')
 a=$(($(echo $depth | awk '{{printf ("%.f",$1)}}')))
 if [ "$a" -ge 10 ] && (echo ${{coverage}} 0.95 | awk '!($1>=$2){{exit 1}}'); then
-	{tools['samtools']} mpileup -q 30 -Q 30 -Bf {ref_fasta} {strain}.sort.bam > {strain}.pileup
+	{tools['samtools']} mpileup -q 30 -Q 30 -Bf {ref_fasta} results/{strain_name}.sort.bam > results/{strain_name}.pileup
 	b=$(($(echo $depth | awk '{{printf ("%.f",$1)}}')/10))
 	if [ $b -lt 5 ]; then
-		{tools['java']} -jar {varscan_jar} mpileup2snp {strain}.pileup --min-coverage 5 --min-reads2 2 --min-avg-qual 30 --min-var-freq 0.75 --p-value 99e-02 > {strain}.varscan
+		{tools['java']} -jar {varscan_jar} mpileup2snp results/{strain_name}.pileup --min-coverage 5 --min-reads2 2 --min-avg-qual 30 --min-var-freq 0.75 --p-value 99e-02 > results/{strain_name}.varscan
 	else
-		{tools['java']} -jar {varscan_jar} mpileup2snp {strain}.pileup --min-coverage $b --min-reads2 2 --min-avg-qual 30 --min-var-freq 0.75 --p-value 99e-02 > {strain}.varscan
+		{tools['java']} -jar {varscan_jar} mpileup2snp results/{strain_name}.pileup --min-coverage $b --min-reads2 2 --min-avg-qual 30 --min-var-freq 0.75 --p-value 99e-02 > results/{strain_name}.varscan
 	fi
-	{tools['java']} -jar {varscan_jar} mpileup2cns {strain}.pileup --min-coverage 3 --min-avg-qual 20 --min-var-freq 0.75 --strand-filter 0 --min-reads2 2 > {strain}.cns
-	awk -F '[:]' '{{if($9==0 || $10==0)$0="";else print $0}}' {strain}.varscan > {strain}.vars
-	perl {ppe_filter_pl} {ppe_list} {strain}.vars > {strain}.var.ppe
-	perl {format_trans_pl} {strain}.var.ppe > {strain}.var.for
-	cut -f2,3,4 {strain}.var.for > {strain}.snp
-	rm -f {strain}.sam {strain}.varscan {strain}.paired.bam {strain}_s.fastq {strain}_1.fastq {strain}_2.fastq {strain}.var.for {strain}.var.ppe {strain}.pileup
-	echo '[{i}/{len(strains)}] {strain} completed successfully'
+	{tools['java']} -jar {varscan_jar} mpileup2cns results/{strain_name}.pileup --min-coverage 3 --min-avg-qual 20 --min-var-freq 0.75 --strand-filter 0 --min-reads2 2 > results/{strain_name}.cns
+	awk -F '[:]' '{{if($9==0 || $10==0)$0="";else print $0}}' results/{strain_name}.varscan > results/{strain_name}.vars
+	perl {ppe_filter_pl} {ppe_list} results/{strain_name}.vars > results/{strain_name}.var.ppe
+	perl {format_trans_pl} results/{strain_name}.var.ppe > results/{strain_name}.var.for
+	cut -f2,3,4 results/{strain_name}.var.for > results/{strain_name}.snp
+	rm -f results/{strain_name}.sam results/{strain_name}.varscan results/{strain_name}.paired.bam results/{strain_name}_s.fastq results/{strain_name}_1.fastq results/{strain_name}_2.fastq results/{strain_name}.var.for results/{strain_name}.var.ppe results/{strain_name}.pileup
+	echo '[{i}/{len(strains)}] {strain_name} completed successfully'
 else
-	echo "{strain} do not meet criteria: ${{depth}} ${{coverage}}" >> discard
-	rm -f {strain}.sam {strain}.varscan {strain}.paired.bam {strain}_s.fastq {strain}_1.fastq {strain}_2.fastq {strain}.var.for {strain}.var.ppe {strain}.pileup
-	echo '[{i}/{len(strains)}] {strain} discarded (low coverage)'
+	echo "{strain_name} do not meet criteria: ${{depth}} ${{coverage}}" >> results/discard
+	rm -f results/{strain_name}.sam results/{strain_name}.varscan results/{strain_name}.paired.bam results/{strain_name}_s.fastq results/{strain_name}_1.fastq results/{strain_name}_2.fastq results/{strain_name}.var.for results/{strain_name}.var.ppe results/{strain_name}.pileup
+	echo '[{i}/{len(strains)}] {strain_name} discarded (low coverage)'
 fi
 """
             out.write(step5)
