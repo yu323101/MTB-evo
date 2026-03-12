@@ -95,8 +95,23 @@ def main():
     print(f"Processing {len(strains)} strains...")
     print()
     
+    # Check if results/ directory exists
+    results_dir = Path("results")
+    if not results_dir.exists():
+        print("Error: results/ directory not found")
+        print("Please create it first: mkdir results")
+        sys.exit(1)
+    
     # Generate pipeline script
-    output_file = "pair_end.sh"
+    output_file = results_dir / "pair_end.sh"
+    
+    # Check if file already exists
+    if output_file.exists():
+        response = input(f"File {output_file} already exists. Overwrite? (y/n): ")
+        if response.lower() != 'y':
+            print("Aborted.")
+            sys.exit(0)
+    
     with open(output_file, "w") as out:
         # Write header
         out.write("#!/bin/bash\n")
@@ -157,12 +172,10 @@ fi
     print(f"  Strains: {len(strains)}")
     print()
     print("To run the pipeline:")
-    print("  cd results")
-    print("  bash pair_end.sh")
+    print("  cd results && bash pair_end.sh")
     print()
     print("Or run in background:")
-    print("  cd results")
-    print("  nohup bash pair_end.sh > pair_end.log 2>&1 &")
+    print("  cd results && nohup bash pair_end.sh > pair_end.log 2>&1 &")
 
 
 if __name__ == "__main__":
