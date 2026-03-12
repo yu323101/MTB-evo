@@ -8,16 +8,16 @@ from typer import Option
 
 def merge_fas(fas_dir: Path, output: Path) -> None:
     """
-    Merge all *.fas files into a single multi-sequence FASTA file.
+    Merge all *.fas and *.fasta files into a single multi-sequence FASTA file.
 
-    This function implements: cat *.fas > all_strains.fa
+    This function implements: cat *.fas *.fasta > all_strains.fa
     """
-    # Find all FAS files
-    fas_files = sorted(fas_dir.glob("*.fas"))
+    # Find all FAS and FASTA files
+    fas_files = sorted(fas_dir.glob("*.fas")) + sorted(fas_dir.glob("*.fasta"))
     if not fas_files:
-        raise ValueError(f"No .fas files found in {fas_dir}")
+        raise ValueError(f"No .fas or .fasta files found in {fas_dir}")
 
-    typer.echo(f"Found {len(fas_files)} FAS files")
+    typer.echo(f"Found {len(fas_files)} FAS/FASTA files")
 
     # Merge files
     with open(output, "w") as out_f:
@@ -33,7 +33,7 @@ def merge_fas(fas_dir: Path, output: Path) -> None:
 
 def merge_cmd(
     fas_dir: Path = Option(
-        Path("."), "--fas-dir", "-f", help="Directory containing .fas files"
+        Path("."), "--fas-dir", "-f", help="Directory containing .fas or .fasta files"
     ),
     output: Path = Option(
         Path("all_strains.fa"), "--output", "-o", help="Output merged FASTA file"
