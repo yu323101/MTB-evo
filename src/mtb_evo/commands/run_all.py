@@ -66,7 +66,30 @@ def run_step1(samples: Path, output_dir: Path, threads: int, sort_threads: int):
         cmd.extend(["--sort-threads", str(sort_threads)])
     
     try:
-        subprocess.run(cmd, check=True, capture_output=True)
+        # Use Popen to handle interactive prompts (e.g., bowtie2 index creation)
+        process = subprocess.Popen(
+            cmd,
+            stdout=subprocess.PIPE,
+            stderr=subprocess.PIPE,
+            stdin=subprocess.PIPE,
+            text=True,
+            cwd=script_dir
+        )
+        
+        # Auto-answer 'y' to any prompts (e.g., create bowtie2 index)
+        stdout, stderr = process.communicate(input='y\n', timeout=600)
+        
+        if process.returncode != 0:
+            typer.echo(f"❌ Script failed with error:")
+            typer.echo(stderr)
+            sys.exit(1)
+        
+        # Display output for user to see progress
+        if stdout:
+            for line in stdout.split('\n'):
+                if line.strip():
+                    typer.echo(f"    {line}")
+        
         typer.echo("  ✓ Generated: results/pair_end.sh")
         typer.echo("  ✓ Tools detected: sickle, bowtie2, samtools, java, VarScan")
         
@@ -75,6 +98,10 @@ def run_step1(samples: Path, output_dir: Path, threads: int, sort_threads: int):
             strain_count = len([line for line in f if line.strip()])
         typer.echo(f"  ✓ Found {strain_count} strains to process")
         
+    except subprocess.TimeoutExpired:
+        typer.echo("❌ Timeout: Script took too long (>10 minutes)")
+        process.kill()
+        sys.exit(1)
     except subprocess.CalledProcessError as e:
         typer.echo(f"❌ Failed to generate script: {e}")
         sys.exit(1)
