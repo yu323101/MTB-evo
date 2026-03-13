@@ -63,9 +63,17 @@ ls *_1.fastq.gz | sed 's/_1.fastq.gz//' > samples.txt
 # 激活环境
 conda activate mtb-evo
 
-# 运行完整流程
+# 方式一：一键运行（推荐）
 mtb-evo run-all --samples samples.txt --output-dir results/
+
+# 方式二：分步运行（见下方详细指南）
+# 适合需要自定义参数或排查问题的用户
 ```
+
+**性能优化提示**：
+- 默认使用 50% CPU 核心（如 48 核服务器使用 24 线程）
+- 可自定义线程数：`--threads 32 --sort-threads 16`
+- 自动检测并创建 bowtie2 索引（首次运行）
 
 ## 📂 分析结果
 
@@ -91,20 +99,99 @@ mtb-evo run-all --samples samples.txt --output-dir results/
 
 如果你想控制每一步，或某一步出错需要重跑：
 
-```bash
-# Step 1: 生成分析脚本
-mtb-evo step1 --samples samples.txt --output-dir results/
+#### Step 1-2: SNP Calling（变异检测）
 
-# Step 2: SNP calling（耗时最长，建议后台运行）
+```bash
+# 生成 SNP calling 脚本
+# 默认使用 50% CPU 核心，可自定义：--threads 32 --sort-threads 16
+python3 scripts/pair_fixed_nostrandbias.py local_test/samples.txt
+
+# 执行脚本（后台运行，耗时最长）
 cd results
 nohup bash pair_end.sh > pair_end.log 2>&1 &
 
 # 查看进度
 tail -f pair_end.log
-
-# Step 2 完成后，继续后续步骤
-mtb-evo step3-10 --output-dir results/
 ```
+
+**输出文件**：
+- `*.snp` - SNP 检测结果
+- `*.cns` - 一致性序列
+- `*.sort.bam` - 排序后的比对文件
+
+#### Step 4: 提取差异位点
+
+```bash
+cd results
+mtb-evo diff-loci --snp-dir . --output diff_loci.txt
+```
+
+**输出**：`diff_loci.txt`（差异位点列表）
+
+#### Step 7: 基因型召回
+
+```bash
+# 创建深度阈值文件（根据平均测序深度设置）
+echo 10 > depth.txt
+
+# 对每个样本执行召回
+mtb-evo recall \
+    --loci diff_loci.txt \
+    --depth depth.txt \
+    --cns MD601.cleaned.cns \
+    --output MD601.recall.fasta
+
+mtb-evo recall \
+    --loci diff_loci.txt \
+    --depth depth.txt \
+    --cns MD602.cleaned.cns \
+    --output MD602.recall.fasta
+```
+
+**输出**：`*.recall.fasta`（基因型序列）
+
+#### Step 8: 合并序列
+
+```bash
+mtb-evo merge --fas-dir . --output merged.fasta
+```
+
+**输出**：`merged.fasta`（合并后的多序列比对）
+
+#### Step 9: 提取野生型碱基
+
+```bash
+mtb-evo wild-extract \
+    --loci diff_loci.txt \
+    --ancestor ../data/tb.ancestor.fasta \
+    --output wildtype.fasta
+```
+
+**输出**：`wildtype.fasta`（野生型碱基序列）
+
+#### Step 10: 核心 SNP 过滤
+
+```bash
+mtb-evo filter \
+    --wild-loci wildtype.fasta \
+    --alignment merged.fasta \
+    --threshold 5 \
+    --output-prefix core_snps
+```
+
+**输出**：
+- `all_strains.fadel-InvMisF5.bak.fa`（过滤后的核心 SNP）
+- `all_strains.fadel-InvMisF5.bak.loc`（保留位点坐标）
+
+#### Step 11: SNP 距离计算
+
+```bash
+mtb-evo distance \
+    --alignment all_strains.fadel-InvMisF5.bak.fa \
+    --output distance_matrix.txt
+```
+
+**输出**：`distance_matrix.txt`（样本间 SNP 距离矩阵）
 
 ### 方式三：Snakemake 流程（批量处理）
 
@@ -118,6 +205,82 @@ vim config.yaml
 snakemake --cores 4
 ```
 
+---
+
+## 📊 实际运行案例
+
+以下是在 48 核服务器上运行 2 个样本（MD601 和 MD602）的完整示例：
+
+### 系统配置
+- **CPU**: Intel Xeon Silver 4214 × 2 (48 核)
+- **内存**: 32GB
+- **线程设置**: 24 线程（默认 50%）
+
+### 运行结果
+
+| 步骤 | 命令 | 结果 | 耗时 |
+|------|------|------|------|
+| Step 1-2 | SNP calling | 1423 SNPs (MD601), 1400 SNPs (MD602) | ~2 小时 |
+| Step 4 | diff-loci | 224 差异位点 / 1348 总位点 | <1 分钟 |
+| Step 7 | recall | 2 个样本基因型召回成功 | <1 分钟 |
+| Step 8 | merge | 2 个文件合并成功 | <1 分钟 |
+| Step 9 | wild-extract | 224 个野生型碱基提取 | <1 分钟 |
+| Step 10 | filter | 201/224 位点保留 | <1 分钟 |
+| Step 11 | distance | 距离矩阵计算成功 | <1 分钟 |
+
+### 完整命令流
+
+```bash
+# 1. 环境准备
+conda activate mtb-evocd /home/nmx/mtb-evo
+
+# 2. SNP Calling（使用 24 线程）
+python3 scripts/pair_fixed_nostrandbias.py local_test/samples.txt
+cd results && nohup bash pair_end.sh > pair_end.log 2>&1 &
+
+# 3. 等待 Step 2 完成后，继续后续步骤
+cd /home/nmx/mtb-evo/results
+
+# Step 4: 差异位点提取
+mtb-evo diff-loci --snp-dir . --output diff_loci.txt
+
+# Step 7: 基因型召回
+echo 10 > depth.txt
+mtb-evo recall -l diff_loci.txt -d depth.txt -c MD601.cleaned.cns -o MD601.recall.fasta
+mtb-evo recall -l diff_loci.txt -d depth.txt -c MD602.cleaned.cns -o MD602.recall.fasta
+
+# Step 8: 序列合并
+mtb-evo merge -f . -o merged.fasta
+
+# Step 9: 野生型提取
+mtb-evo wild-extract -l diff_loci.txt -a ../data/tb.ancestor.fasta -o wildtype.fasta
+
+# Step 10: 核心 SNP 过滤
+mtb-evo filter -w wildtype.fasta -a merged.fasta -o core_snps
+
+# Step 11: 距离计算
+mtb-evo distance -a all_strains.fadel-InvMisF5.bak.fa -o distance_matrix.txt
+```
+
+### 输出文件清单
+
+```
+results/
+├── MD601.cleaned.snp              # SNP 结果
+├── MD601.cleaned.cns              # CNS 文件
+├── MD602.cleaned.snp
+├── MD602.cleaned.cns
+├── diff_loci.txt                  # 224 差异位点
+├── depth.txt                      # 深度阈值
+├── MD601.recall.fasta             # 基因型召回
+├── MD602.recall.fasta
+├── merged.fasta                   # 合并序列
+├── wildtype.fasta                 # 野生型碱基
+├── all_strains.fadel-InvMisF5.bak.fa    # 核心 SNP
+├── all_strains.fadel-InvMisF5.bak.loc   # 坐标信息
+└── distance_matrix.txt            # 距离矩阵
+```
+
 ## 🔧 单命令使用
 
 ### Step 4: 提取差异位点
@@ -129,52 +292,56 @@ mtb-evo diff-loci --snp-dir . --output diff_location.list
 **输入**: `*.snp` 文件  
 **输出**: `diff_location.list`（差异位点坐标列表）
 
-### Step 7: 基因型回溯
+### Step 7: 基因型召回
 
 ```bash
+# 创建深度阈值文件
+echo 10 > depth.txt
+
+# 执行召回
 mtb-evo recall \
-    --loci diff_location.list \
+    --loci diff_loci.txt \
     --depth depth.txt \
     --cns sample.cns \
-    --output sample.fas
+    --output sample.recall.fasta
 ```
 
-**输入**: 差异位点列表、深度阈值、CNS 文件  
-**输出**: `*.fas`（基因型序列）
+**输入**: 差异位点列表、深度阈值文件、CNS 文件  
+**输出**: `*.recall.fasta`（基因型序列）
 
 ### Step 8: 合并序列
 
 ```bash
-mtb-evo merge --fas-dir . --output all_strains.fa
+mtb-evo merge --fas-dir . --output merged.fasta
 ```
 
-**输入**: `*.fas` 文件  
-**输出**: `all_strains.fa`（合并后的多序列比对）
+**输入**: `*.fas` 或 `*.fasta` 文件（自动识别两种格式）  
+**输出**: `merged.fasta`（合并后的多序列比对）
 
-### Step 9: 提取祖先碱基
+### Step 9: 提取野生型碱基
 
 ```bash
 mtb-evo wild-extract \
-    --loci diff_location.list \
-    --ancestor tb.ancestor.fasta \
-    --output wild_loci.list
+    --loci diff_loci.txt \
+    --ancestor ../data/tb.ancestor.fasta \
+    --output wildtype.fasta
 ```
 
 **输入**: 差异位点列表、祖先序列  
-**输出**: `wild_loci.list`（野生型碱基列表）
+**输出**: `wildtype.fasta`（野生型碱基序列）
 
 ### Step 10: 核心 SNP 过滤
 
 ```bash
 mtb-evo filter \
-    --wild-loci wild_loci.list \
-    --alignment all_strains.fa \
+    --wild-loci wildtype.fasta \
+    --alignment merged.fasta \
     --threshold 5 \
-    --output-prefix all_strains
+    --output-prefix core_snps
 ```
 
-**输入**: 野生型碱基列表、序列比对、阈值  
-**输出**: 
+**输入**: 野生型碱基序列、合并的序列比对、阈值  
+**输出**:
 - `all_strains.fadel-InvMisF5.bak.fa`（过滤后的核心 SNP）
 - `all_strains.fadel-InvMisF5.bak.loc`（保留位点坐标）
 
@@ -222,27 +389,75 @@ ls results/*.snp | wc -l  # 应该等于样本数
 
 ### Q5: 报错 "No .snp files found"
 
-**原因**: Step 2 未完成或失败
+**原因**: Step 2 未完成或失败；或输出文件不在 results/ 目录
 
 **解决**:
 ```bash
 # 检查日志
 cat results/pair_end.log | grep -i error
 
+# 检查输出文件位置
+ls results/*.snp
+ls test_data/*.snp  # 如果在这里，需要移动到 results/
+
 # 如果失败，重跑 Step 2
 cd results && bash pair_end.sh
 ```
 
+### Q6: 如何自定义线程数？
+
+**解决**:
+```bash
+# 使用 --threads 和 --sort-threads 参数
+python3 scripts/pair_fixed_nostrandbias.py samples.txt --threads 32 --sort-threads 16
+
+# 默认使用 50% CPU 核心
+# 例如 48 核服务器默认使用 24 线程
+```
+
 ## 🛠️ 故障排除
 
-### 错误 1: "VarScan not found"
+### 错误 1: Git 操作超时或失败
+
+**症状**: `git pull`、`git fetch` 或 `git clone` 超时
+
+**原因**: 网络防火墙限制 HTTPS 连接
+
+**解决方法**:
+```bash
+# 方法 1: 增加 Git 超时时间
+git config --global http.lowSpeedLimit 1000
+git config --global http.lowSpeedTime 300
+
+# 方法 2: 使用 wget/curl 下载单个文件（跳过证书验证）
+curl -k -o scripts/pair_fixed_nostrandbias.py \
+  https://raw.githubusercontent.com/yu323101/mtb-evo/main/scripts/pair_fixed_nostrandbias.py
+
+# 方法 3: 手动复制文件
+# 从其他设备下载后，通过 U 盘、邮件等方式传输到服务器
+```
+
+### 错误 2: "VarScan not found"
 
 ```bash
 # 解决：下载 VarScan
 bash scripts/download_varscan.sh
 ```
 
-### 错误 2: "command not found: mtb-evo"
+### 错误 3: "No .fas or .fasta files found"
+
+**原因**: merge 命令找不到输入文件
+
+**解决**:
+```bash
+# 确保文件扩展名正确（支持 .fas 和 .fasta）
+ls *.fas *.fasta 2>/dev/null
+
+# 如果文件是 .fasta 格式，直接运行即可
+mtb-evo merge --fas-dir . --output merged.fasta
+```
+
+### 错误 4: "command not found: mtb-evo"
 
 ```bash
 # 解决：激活环境
@@ -252,7 +467,7 @@ conda activate mtb-evo
 which mtb-evo
 ```
 
-### 错误 3: "Out of memory"
+### 错误 5: "Out of memory"
 
 **原因**: 内存不足
 
@@ -273,7 +488,7 @@ cp -r test_data/* ./
 mtb-evo run-all --samples samples.txt --output-dir results/
 ```
 
-示例数据包含 6 个样本，运行时间约 10 分钟（不含 Step 2）。
+示例数据包含多个样本，运行时间约 10 分钟（不含 Step 2）。
 
 ## 📝 引用
 
