@@ -1,4 +1,4 @@
-"""Step 10: Filter core SNP alignment."""
+"""Step 7: Filter core SNP alignment."""
 
 from collections import defaultdict
 from pathlib import Path

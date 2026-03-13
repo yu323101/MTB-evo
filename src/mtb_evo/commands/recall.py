@@ -1,4 +1,4 @@
-"""Step 7: Genotype recall from CNS files."""
+"""Step 4: Genotype recall from CNS files."""
 
 from pathlib import Path
 from typing import Dict, List, Set
@@ -12,13 +12,14 @@ def recall_genotype(
     depth_file: Path,
     cns_file: Path,
     output: Path,
+    default_depth: int = 10,
 ) -> None:
     """
     Back-calculate genotypes from CNS files based on differential loci.
 
     This function implements the logic from 1st_loci_recall_cns.pl:
     1. Read differential loci list
-    2. Read depth threshold
+    2. Read depth threshold (or use default value 10)
     3. Parse CNS file and determine genotype for each locus
     4. Output FASTA format sequence
     """
@@ -35,8 +36,12 @@ def recall_genotype(
             genotype[pos] = "N"  # Default to N
 
     # Step 2: Read depth threshold (10% of average depth)
-    with open(depth_file) as f:
-        avg_depth = int(f.read().strip())
+    # If depth_file is provided and exists, use it; otherwise use default
+    if depth_file and depth_file.exists():
+        with open(depth_file) as f:
+            avg_depth = int(f.read().strip())
+    else:
+        avg_depth = default_depth
     depth_threshold = avg_depth * 0.1
 
     # Step 3: Parse CNS file
@@ -133,7 +138,7 @@ def recall_genotype(
 
 def recall_cmd(
     loci: Path = Option(..., "--loci", "-l", help="Differential loci list file"),
-    depth: Path = Option(..., "--depth", "-d", help="Depth threshold file"),
+    depth: Path = Option(None, "--depth", "-d", help="Depth threshold file (optional, default: 10)"),
     cns: Path = Option(..., "--cns", "-c", help="CNS file from VarScan"),
     output: Path = Option(..., "--output", "-o", help="Output FASTA file"),
 ) -> None:

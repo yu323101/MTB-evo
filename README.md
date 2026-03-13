@@ -119,7 +119,7 @@ tail -f pair_end.log
 - `*.cns` - 一致性序列
 - `*.sort.bam` - 排序后的比对文件
 
-#### Step 4: 提取差异位点
+#### Step 3: 提取差异位点
 
 ```bash
 cd results
@@ -128,29 +128,28 @@ mtb-evo diff-loci --snp-dir . --output diff_loci.txt
 
 **输出**：`diff_loci.txt`（差异位点列表）
 
-#### Step 7: 基因型召回
+#### Step 4: 基因型召回
 
 ```bash
-# 创建深度阈值文件（根据平均测序深度设置）
-echo 10 > depth.txt
-
-# 对每个样本执行召回
+# 使用默认深度 10（无需创建 depth.txt）
 mtb-evo recall \
     --loci diff_loci.txt \
-    --depth depth.txt \
     --cns MD601.cleaned.cns \
     --output MD601.recall.fasta
 
 mtb-evo recall \
     --loci diff_loci.txt \
-    --depth depth.txt \
     --cns MD602.cleaned.cns \
     --output MD602.recall.fasta
+
+# 或使用自定义深度文件
+echo 15 > depth.txt
+mtb-evo recall --loci diff_loci.txt --depth depth.txt --cns sample.cns --output sample.recall.fasta
 ```
 
 **输出**：`*.recall.fasta`（基因型序列）
 
-#### Step 8: 合并序列
+#### Step 5: 合并序列
 
 ```bash
 mtb-evo merge --fas-dir . --output merged.fasta
@@ -158,7 +157,7 @@ mtb-evo merge --fas-dir . --output merged.fasta
 
 **输出**：`merged.fasta`（合并后的多序列比对）
 
-#### Step 9: 提取野生型碱基
+#### Step 6: 提取野生型碱基
 
 ```bash
 mtb-evo wild-extract \
@@ -169,7 +168,7 @@ mtb-evo wild-extract \
 
 **输出**：`wildtype.fasta`（野生型碱基序列）
 
-#### Step 10: 核心 SNP 过滤
+#### Step 7: 核心 SNP 过滤
 
 ```bash
 mtb-evo filter \
@@ -183,7 +182,7 @@ mtb-evo filter \
 - `all_strains.fadel-InvMisF5.bak.fa`（过滤后的核心 SNP）
 - `all_strains.fadel-InvMisF5.bak.loc`（保留位点坐标）
 
-#### Step 11: SNP 距离计算
+#### Step 8: SNP 距离计算
 
 ```bash
 mtb-evo distance \
@@ -221,12 +220,12 @@ snakemake --cores 4
 | 步骤 | 命令 | 结果 | 耗时 |
 |------|------|------|------|
 | Step 1-2 | SNP calling | 1423 SNPs (MD601), 1400 SNPs (MD602) | ~2 小时 |
-| Step 4 | diff-loci | 224 差异位点 / 1348 总位点 | <1 分钟 |
-| Step 7 | recall | 2 个样本基因型召回成功 | <1 分钟 |
-| Step 8 | merge | 2 个文件合并成功 | <1 分钟 |
-| Step 9 | wild-extract | 224 个野生型碱基提取 | <1 分钟 |
-| Step 10 | filter | 201/224 位点保留 | <1 分钟 |
-| Step 11 | distance | 距离矩阵计算成功 | <1 分钟 |
+| Step 3 | diff-loci | 224 差异位点 / 1348 总位点 | <1 分钟 |
+| Step 4 | recall | 2 个样本基因型召回成功 | <1 分钟 |
+| Step 5 | merge | 2 个文件合并成功 | <1 分钟 |
+| Step 6 | wild-extract | 224 个野生型碱基提取 | <1 分钟 |
+| Step 7 | filter | 201/224 位点保留 | <1 分钟 |
+| Step 8 | distance | 距离矩阵计算成功 | <1 分钟 |
 
 ### 完整命令流
 
@@ -241,24 +240,23 @@ cd results && nohup bash pair_end.sh > pair_end.log 2>&1 &
 # 3. 等待 Step 2 完成后，继续后续步骤
 cd /home/nmx/mtb-evo/results
 
-# Step 4: 差异位点提取
+# Step 3: 差异位点提取
 mtb-evo diff-loci --snp-dir . --output diff_loci.txt
 
-# Step 7: 基因型召回
-echo 10 > depth.txt
-mtb-evo recall -l diff_loci.txt -d depth.txt -c MD601.cleaned.cns -o MD601.recall.fasta
-mtb-evo recall -l diff_loci.txt -d depth.txt -c MD602.cleaned.cns -o MD602.recall.fasta
+# Step 4: 基因型召回（使用默认深度 10）
+mtb-evo recall -l diff_loci.txt -c MD601.cleaned.cns -o MD601.recall.fasta
+mtb-evo recall -l diff_loci.txt -c MD602.cleaned.cns -o MD602.recall.fasta
 
-# Step 8: 序列合并
+# Step 5: 序列合并
 mtb-evo merge -f . -o merged.fasta
 
-# Step 9: 野生型提取
+# Step 6: 野生型提取
 mtb-evo wild-extract -l diff_loci.txt -a ../data/tb.ancestor.fasta -o wildtype.fasta
 
-# Step 10: 核心 SNP 过滤
+# Step 7: 核心 SNP 过滤
 mtb-evo filter -w wildtype.fasta -a merged.fasta -o core_snps
 
-# Step 11: 距离计算
+# Step 8: 距离计算
 mtb-evo distance -a all_strains.fadel-InvMisF5.bak.fa -o distance_matrix.txt
 ```
 
@@ -292,24 +290,25 @@ mtb-evo diff-loci --snp-dir . --output diff_location.list
 **输入**: `*.snp` 文件  
 **输出**: `diff_location.list`（差异位点坐标列表）
 
-### Step 7: 基因型召回
+### Step 4: 基因型召回
 
 ```bash
-# 创建深度阈值文件
-echo 10 > depth.txt
-
-# 执行召回
+# 使用默认深度 10（无需创建 depth.txt）
 mtb-evo recall \
     --loci diff_loci.txt \
-    --depth depth.txt \
     --cns sample.cns \
     --output sample.recall.fasta
+
+# 或使用自定义深度文件
+echo 15 > depth.txt
+mtb-evo recall --loci diff_loci.txt --depth depth.txt --cns sample.cns --output sample.recall.fasta
 ```
 
-**输入**: 差异位点列表、深度阈值文件、CNS 文件  
-**输出**: `*.recall.fasta`（基因型序列）
+**输入**: 差异位点列表、CNS 文件（可选：深度阈值文件）  
+**输出**: `*.recall.fasta`（基因型序列）  
+**默认深度**: 10（如果未提供 depth.txt）
 
-### Step 8: 合并序列
+### Step 5: 合并序列
 
 ```bash
 mtb-evo merge --fas-dir . --output merged.fasta
@@ -318,7 +317,7 @@ mtb-evo merge --fas-dir . --output merged.fasta
 **输入**: `*.fas` 或 `*.fasta` 文件（自动识别两种格式）  
 **输出**: `merged.fasta`（合并后的多序列比对）
 
-### Step 9: 提取野生型碱基
+### Step 6: 提取野生型碱基
 
 ```bash
 mtb-evo wild-extract \
@@ -330,7 +329,7 @@ mtb-evo wild-extract \
 **输入**: 差异位点列表、祖先序列  
 **输出**: `wildtype.fasta`（野生型碱基序列）
 
-### Step 10: 核心 SNP 过滤
+### Step 7: 核心 SNP 过滤
 
 ```bash
 mtb-evo filter \
