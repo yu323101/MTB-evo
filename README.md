@@ -82,6 +82,7 @@ mtb-evo run-all --samples samples.txt --output-dir results/
 | 文件 | 说明 | 用途 |
 |------|------|------|
 | `all_strains.fadel-InvMisF5.bak.fa` | 核心 SNP 序列 | 构建系统发育树 |
+| `all_strains.fadel-InvMisF5.bak.loc` | 核心 SNP 序列对应的坐标列表 | 记录过滤后保留的 SNP 位点在参考基因组上的位置 |
 | `pair.txt` | 样本间 SNP 距离矩阵 | 传播链分析 |
 | `test.tree` | 系统发育树 | 进化关系可视化 |
 
