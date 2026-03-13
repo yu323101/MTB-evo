@@ -1,5 +1,6 @@
-"""Step 1-8: Run complete MTB-Evo pipeline with logging to file."""
+"""Step 1-8: Run complete MTB-Evo pipeline in daemon mode."""
 
+import os
 import subprocess
 import sys
 import time
@@ -29,24 +30,20 @@ def run_step1(samples: Path, output_dir: Path, threads: int, sort_threads: int, 
     """Step 1: Generate SNP calling script."""
     log_f.write("[1/8] Step 1: Generating SNP calling script...\n")
     
-    # Check tools
     missing = check_tools()
     if missing:
         log_f.write(f"❌ Missing tools: {', '.join(missing)}\n")
         log_f.write("Please activate conda environment: conda activate mtb-evo\n")
         sys.exit(1)
     
-    # Get absolute paths
     script_dir = Path(__file__).parent.parent.parent.parent
     pair_script = script_dir / "scripts" / "pair_fixed_nostrandbias.py"
     samples_abs = samples.absolute()
     
-    # Verify script exists
     if not pair_script.exists():
         log_f.write(f"❌ Script not found: {pair_script}\n")
         sys.exit(1)
     
-    # Verify samples file exists
     if not samples_abs.exists():
         log_f.write(f"❌ Sample list not found: {samples_abs}\n")
         sys.exit(1)
@@ -54,7 +51,6 @@ def run_step1(samples: Path, output_dir: Path, threads: int, sort_threads: int, 
     log_f.write(f"  📄 Using script: {pair_script}\n")
     log_f.write(f"  📄 Using samples: {samples_abs}\n")
     
-    # Generate script
     cmd = [
         "python3", 
         str(pair_script),
@@ -104,18 +100,18 @@ def run_step1(samples: Path, output_dir: Path, threads: int, sort_threads: int, 
         sys.exit(1)
 
 
-def run_step2(output_dir: Path, script_dir: Path, log_f):
-    """Step 2: Run SNP calling in background."""
-    log_f.write("\n[2/8] Step 2: Running SNP calling (background)\n")
+def run_step2_daemon(output_dir: Path, script_dir: Path, log_f):
+    """Step 2: Run SNP calling as daemon."""
+    log_f.write("\n[2/8] Step 2: Running SNP calling (daemon mode)\n")
     
     script_path = output_dir / "pair_end.sh"
     log_path = output_dir / "pair_end.log"
     
     if not script_path.exists():
         log_f.write(f"❌ Script not found: {script_path}\n")
-        log_f.write("Please run Step 1 first.\n")
         sys.exit(1)
     
+    # Check if already running
     result = subprocess.run(
         ["pgrep", "-f", "pair_end.sh"],
         capture_output=True
@@ -124,18 +120,20 @@ def run_step2(output_dir: Path, script_dir: Path, log_f):
     if result.returncode == 0:
         log_f.write("  ⚠️  SNP calling is already running\n")
     else:
+        # Start as daemon using nohup
         with open(log_path, "w") as log_file:
             subprocess.Popen(
-                ["bash", str(script_path)],
+                ["nohup", "bash", str(script_path)],
                 stdout=log_file,
                 stderr=subprocess.STDOUT,
-                cwd=script_dir
+                stdin=subprocess.DEVNULL,
+                cwd=script_dir,
+                start_new_session=True  # Create new session, independent of terminal
             )
-        log_f.write(f"  ✓ Started: {script_path}\n")
+        log_f.write(f"  ✓ Started daemon: {script_path}\n")
     
     log_f.write(f"  📄 Log file: {log_path}\n")
     log_f.write("  ⏱️  This step may take 2-4 hours.\n")
-    log_f.write("  💡 Use 'tail -f results/pair_end.log' to monitor progress.\n")
 
 
 def check_step2_complete(output_dir: Path, expected_count: int) -> bool:
@@ -144,81 +142,56 @@ def check_step2_complete(output_dir: Path, expected_count: int) -> bool:
     return len(snp_files) >= expected_count
 
 
-def run_all(
-    samples: Path = Option(..., "--samples", "-s", help="Sample list file"),
-    output_dir: Path = Option(Path("results"), "--output-dir", "-o", help="Output directory"),
-    threads: int = Option(None, "--threads", "-t", help="Number of threads for bowtie2"),
-    sort_threads: int = Option(None, "--sort-threads", help="Number of threads for samtools sort"),
-    foreground: bool = Option(False, "--foreground", "-f", help="Run in foreground and wait for completion"),
-    log_file: Path = Option(None, "--log-file", "-l", help="Log file path (default: auto-generate)"),
-) -> None:
-    """Run complete MTB-Evo pipeline (Steps 1-8)."""
-    
-    # Validate inputs
-    if not samples.exists():
-        print(f"❌ Sample list not found: {samples}", file=sys.stderr)
-        sys.exit(1)
-    
+def run_all_steps(samples: Path, output_dir: Path, threads: int, sort_threads: int):
+    """Run all steps in daemon mode."""
+    # Setup log file
+    timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
+    log_file = output_dir / f"run_all_{timestamp}.log"
     output_dir.mkdir(parents=True, exist_ok=True)
     
-    # Set up log file
-    if log_file is None:
-        timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
-        log_file = output_dir / f"run_all_{timestamp}.log"
-    
-    # Open log file
     log_f = open(log_file, 'w')
     
     try:
-        # Print only log file path to terminal
-        print(f"Log: {log_file}")
-        
-        # Get script directory
         script_dir = Path(__file__).parent.parent.parent.parent
         
-        # Count expected samples
         with open(samples) as f:
             expected_samples = len([line for line in f if line.strip()])
         
-        # Step 1: Generate script
+        # Step 1
         run_step1(samples, output_dir, threads, sort_threads, log_f)
         
-        # Step 2: Run SNP calling
-        run_step2(output_dir, script_dir, log_f)
+        # Step 2 (daemon)
+        run_step2_daemon(output_dir, script_dir, log_f)
         
-        # Wait for Step 2 to complete
-        if not check_step2_complete(output_dir, expected_samples):
-            if foreground:
-                log_f.write("\n⏳ Waiting for Step 2 to complete...\n")
-                log_f.write(f"   Use 'tail -f {output_dir}/pair_end.log' to monitor progress\n")
-                while not check_step2_complete(output_dir, expected_samples):
-                    time.sleep(30)
-                log_f.write("  ✓ Step 2 completed!\n")
-            else:
-                log_f.write("\n⏳ Monitoring Step 2 progress...\n")
-                log_f.write("   This may take 2-4 hours. You can close this terminal.\n")
-                log_f.write(f"   Use 'tail -f {output_dir}/pair_end.log' to check progress.\n")
-                
-                start_time = time.time()
-                last_count = 0
-                
-                while not check_step2_complete(output_dir, expected_samples):
-                    snp_files = list(output_dir.glob("*.snp"))
-                    current_count = len(snp_files)
-                    
-                    if current_count > last_count:
-                        elapsed = (time.time() - start_time) / 60
-                        log_f.write(f"   Progress: {current_count}/{expected_samples} samples completed ({elapsed:.1f} min)\n")
-                        log_f.flush()
-                        last_count = current_count
-                    
-                    time.sleep(60)
-                
+        # Wait for Step 2
+        log_f.write("\n⏳ Monitoring Step 2 progress...\n")
+        log_f.write("   This may take 2-4 hours.\n")
+        log_f.flush()
+        
+        start_time = time.time()
+        last_count = 0
+        
+        while not check_step2_complete(output_dir, expected_samples):
+            snp_files = list(output_dir.glob("*.snp"))
+            current_count = len(snp_files)
+            
+            if current_count > last_count:
                 elapsed = (time.time() - start_time) / 60
-                log_f.write(f"  ✓ Step 2 completed! ({elapsed:.1f} min)\n")
-                log_f.write("  Continuing with Steps 3-8...\n")
+                log_f.write(f"   Progress: {current_count}/{expected_samples} samples completed ({elapsed:.1f} min)\n")
+                log_f.flush()
+                last_count = current_count
+            
+            time.sleep(60)
         
-        # Import commands for Steps 3-8
+        elapsed = (time.time() - start_time) / 60
+        log_f.write(f"  ✓ Step 2 completed! ({elapsed:.1f} min)\n")
+        log_f.write("  Continuing with Steps 3-8...\n\n")
+        log_f.flush()
+        
+        # Change to output directory for remaining steps
+        os.chdir(output_dir)
+        
+        # Import commands
         from mtb_evo.commands.diff_loci import diff_loci_cmd
         from mtb_evo.commands.recall import recall_cmd
         from mtb_evo.commands.merge import merge_cmd
@@ -226,33 +199,25 @@ def run_all(
         from mtb_evo.commands.filter import filter_cmd
         from mtb_evo.commands.distance import distance_cmd
         
-        import os
-        os.chdir(output_dir)
-        
-        # Step 3: Extract differential loci
-        log_f.write("\n[3/8] Step 3: Extracting differential loci...\n")
+        # Step 3
+        log_f.write("[3/8] Step 3: Extracting differential loci...\n")
         log_f.flush()
         diff_loci_cmd(Path("."), Path("diff_loci.txt"))
         
-        # Step 4: Recall genotypes
+        # Step 4
         log_f.write("\n[4/8] Step 4: Recalling genotypes...\n")
         log_f.flush()
         cns_files = list(Path(".").glob("*.cns"))
         for cns_file in cns_files:
             output_name = cns_file.stem.replace(".cns", "") + ".recall.fasta"
-            recall_cmd(
-                Path("diff_loci.txt"),
-                None,
-                cns_file,
-                Path(output_name)
-            )
+            recall_cmd(Path("diff_loci.txt"), None, cns_file, Path(output_name))
         
-        # Step 5: Merge sequences
+        # Step 5
         log_f.write("\n[5/8] Step 5: Merging sequences...\n")
         log_f.flush()
         merge_cmd(Path("."), Path("merged.fasta"))
         
-        # Step 6: Extract wild-type bases
+        # Step 6
         log_f.write("\n[6/8] Step 6: Extracting wild-type bases...\n")
         log_f.flush()
         ancestor = Path("../data/tb.ancestor.fasta")
@@ -260,12 +225,12 @@ def run_all(
             ancestor = Path("data/tb.ancestor.fasta")
         wild_extract_cmd(Path("diff_loci.txt"), ancestor, Path("wildtype.fasta"))
         
-        # Step 7: Filter core SNPs
+        # Step 7
         log_f.write("\n[7/8] Step 7: Filtering core SNPs...\n")
         log_f.flush()
         filter_cmd(Path("wildtype.fasta"), Path("merged.fasta"), 5, "core_snps")
         
-        # Step 8: Calculate distances
+        # Step 8
         log_f.write("\n[8/8] Step 8: Calculating pairwise distances...\n")
         log_f.flush()
         bak_files = list(Path(".").glob("*.bak.fa"))
@@ -293,8 +258,54 @@ def run_all_cmd(
     output_dir: Path = Option(Path("results"), "--output-dir", "-o", help="Output directory"),
     threads: int = Option(None, "--threads", "-t", help="Number of threads for bowtie2"),
     sort_threads: int = Option(None, "--sort-threads", help="Number of threads for samtools sort"),
-    foreground: bool = Option(False, "--foreground", "-f", help="Run in foreground and wait for completion"),
-    log_file: Path = Option(None, "--log-file", "-l", help="Log file path (default: auto-generate)"),
 ) -> None:
-    """Run complete MTB-Evo pipeline (Steps 1-8)."""
-    run_all(samples, output_dir, threads, sort_threads, foreground, log_file)
+    """Run complete MTB-Evo pipeline (Steps 1-8) in daemon mode."""
+    
+    # Validate inputs
+    if not samples.exists():
+        print(f"❌ Sample list not found: {samples}", file=sys.stderr)
+        sys.exit(1)
+    
+    output_dir.mkdir(parents=True, exist_ok=True)
+    
+    # Prepare log file path (for display)
+    timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
+    log_file = output_dir / f"run_all_{timestamp}.log"
+    
+    # Fork to create daemon
+    try:
+        pid = os.fork()
+        if pid > 0:
+            # Parent process: exit immediately
+            sys.exit(0)
+    except OSError as e:
+        print(f"❌ Failed to fork: {e}", file=sys.stderr)
+        sys.exit(1)
+    
+    # Child process (daemon)
+    os.chdir(output_dir)
+    os.setsid()  # Create new session
+    os.umask(0)
+    
+    # Second fork to prevent zombie processes
+    try:
+        pid = os.fork()
+        if pid > 0:
+            sys.exit(0)
+    except OSError as e:
+        print(f"❌ Failed to fork: {e}", file=sys.stderr)
+        sys.exit(1)
+    
+    # Grandchild process (actual daemon)
+    # Redirect standard file descriptors to /dev/null
+    sys.stdout.flush()
+    sys.stderr.flush()
+    
+    with open('/dev/null', 'r') as f:
+        os.dup2(f.fileno(), sys.stdin.fileno())
+    with open('/dev/null', 'a+') as f:
+        os.dup2(f.fileno(), sys.stdout.fileno())
+        os.dup2(f.fileno(), sys.stderr.fileno())
+    
+    # Run all steps
+    run_all_steps(samples, output_dir, threads, sort_threads)
