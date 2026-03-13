@@ -24,7 +24,8 @@ class MTBPipeline:
         self.output_dir = output_dir.absolute()
         self.threads = threads
         self.sort_threads = sort_threads
-        self.script_dir = Path(__file__).parent.parent.parent.parent
+        # 计算项目根目录：src/core/pipeline.py -> src/ -> 项目根目录
+        self.script_dir = Path(__file__).parent.parent.parent
         self.log_file = None
         self.log_f = None
         
