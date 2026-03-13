@@ -107,7 +107,7 @@ def run_step1(samples: Path, output_dir: Path, threads: int, sort_threads: int):
         sys.exit(1)
 
 
-def run_step2(output_dir: Path):
+def run_step2(output_dir: Path, script_dir: Path):
     """Step 2: Run SNP calling in background."""
     typer.echo("\n[2/8] Step 2: Running SNP calling (background)")
     
@@ -128,13 +128,13 @@ def run_step2(output_dir: Path):
     if result.returncode == 0:
         typer.echo("  ⚠️  SNP calling is already running")
     else:
-        # Start in background
+        # Start in background (run from script_dir, not output_dir)
         with open(log_path, "w") as log_f:
             subprocess.Popen(
                 ["bash", str(script_path)],
                 stdout=log_f,
                 stderr=subprocess.STDOUT,
-                cwd=output_dir
+                cwd=script_dir  # Run from mtb-evo root directory
             )
         typer.echo(f"  ✓ Started: {script_path}")
     
@@ -166,6 +166,9 @@ def run_all(
     
     output_dir.mkdir(parents=True, exist_ok=True)
     
+    # Get script directory (mtb-evo root)
+    script_dir = Path(__file__).parent.parent.parent.parent
+    
     # Count expected samples
     with open(samples) as f:
         expected_samples = len([line for line in f if line.strip()])
@@ -173,8 +176,8 @@ def run_all(
     # Step 1: Generate script
     run_step1(samples, output_dir, threads, sort_threads)
     
-    # Step 2: Run SNP calling
-    run_step2(output_dir)
+    # Step 2: Run SNP calling (from script_dir, not output_dir)
+    run_step2(output_dir, script_dir)
     
     if wait:
         # Wait for Step 2 to complete
