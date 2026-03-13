@@ -35,10 +35,29 @@ def run_step1(samples: Path, output_dir: Path, threads: int, sort_threads: int):
         typer.echo("Please activate conda environment: conda activate mtb-evo")
         sys.exit(1)
     
+    # Get absolute paths
+    script_dir = Path(__file__).parent.parent.parent.parent  # mtb-evo root directory
+    pair_script = script_dir / "scripts" / "pair_fixed_nostrandbias.py"
+    samples_abs = samples.absolute()
+    
+    # Verify script exists
+    if not pair_script.exists():
+        typer.echo(f"❌ Script not found: {pair_script}")
+        sys.exit(1)
+    
+    # Verify samples file exists
+    if not samples_abs.exists():
+        typer.echo(f"❌ Sample list not found: {samples_abs}")
+        sys.exit(1)
+    
+    typer.echo(f"  📄 Using script: {pair_script}")
+    typer.echo(f"  📄 Using samples: {samples_abs}")
+    
     # Generate script
     cmd = [
-        "python3", "scripts/pair_fixed_nostrandbias.py",
-        str(samples),
+        "python3", 
+        str(pair_script),
+        str(samples_abs),
     ]
     
     if threads:
