@@ -64,7 +64,11 @@ ls *_1.fastq.gz | sed 's/_1.fastq.gz//' > samples.txt
 conda activate mtb-evo
 
 # 方式一：一键运行（推荐）
+# 默认后台运行，适合长时间分析
 mtb-evo run-all --samples samples.txt --output-dir results/
+
+# 前台运行（实时查看进度，阻塞直到完成）
+mtb-evo run-all --samples samples.txt --output-dir results/ --foreground
 
 # 方式二：分步运行（见下方详细指南）
 # 适合需要自定义参数或排查问题的用户
@@ -74,6 +78,15 @@ mtb-evo run-all --samples samples.txt --output-dir results/
 - 默认使用 50% CPU 核心（如 48 核服务器使用 24 线程）
 - 可自定义线程数：`--threads 32 --sort-threads 16`
 - 自动检测并创建 bowtie2 索引（首次运行）
+
+**后台运行模式（默认）**：
+- Step 2（SNP calling）在后台运行，立即返回命令行
+- 使用 `tail -f results/pair_end.log` 查看实时进度
+- 完成后重新运行相同命令继续后续步骤
+
+**前台运行模式（`--foreground`）**：
+- 阻塞等待，实时显示所有步骤的输出
+- 适合短时间分析或调试
 
 ## 📂 分析结果
 

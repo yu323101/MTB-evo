@@ -155,7 +155,7 @@ def run_all(
     output_dir: Path = Option(Path("results"), "--output-dir", "-o", help="Output directory"),
     threads: int = Option(None, "--threads", "-t", help="Number of threads for bowtie2"),
     sort_threads: int = Option(None, "--sort-threads", help="Number of threads for samtools sort"),
-    wait: bool = Option(False, "--wait", "-w", help="Wait for Step 2 to complete"),
+    foreground: bool = Option(False, "--foreground", "-f", help="Run in foreground and wait for completion"),
 ) -> None:
     """Run complete MTB-Evo pipeline (Steps 1-8)."""
     
@@ -179,18 +179,20 @@ def run_all(
     # Step 2: Run SNP calling (from script_dir, not output_dir)
     run_step2(output_dir, script_dir)
     
-    if wait:
-        # Wait for Step 2 to complete
+    if foreground:
+        # Foreground mode: wait for Step 2 to complete
         typer.echo("\n⏳ Waiting for Step 2 to complete...")
+        typer.echo(f"   Use 'tail -f {output_dir}/pair_end.log' to monitor progress")
         while not check_step2_complete(output_dir, expected_samples):
             time.sleep(30)
         typer.echo("  ✓ Step 2 completed!")
     else:
-        # Check if already complete
+        # Background mode (default): exit immediately
         if not check_step2_complete(output_dir, expected_samples):
-            typer.echo("\n⚠️  Step 2 is still running.")
-            typer.echo("   Please wait for it to complete, then re-run this command.")
-            sys.exit(0)
+            typer.echo("\n✓ Step 2 is running in background.")
+            typer.echo(f"   Monitor progress: tail -f {output_dir}/pair_end.log")
+            typer.echo(f"   Continue analysis: mtb-evo run-all --samples {samples} --foreground")
+            return  # Exit without running Steps 3-8
     
     # Import commands for Steps 3-8
     from mtb_evo.commands.diff_loci import diff_loci_cmd
