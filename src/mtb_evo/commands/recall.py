@@ -1,7 +1,7 @@
 """Step 4: Genotype recall from CNS files."""
 
 from pathlib import Path
-from typing import Dict, List, Set
+from typing import Dict, List, Optional, Set
 
 import typer
 from typer import Option
@@ -9,7 +9,7 @@ from typer import Option
 
 def recall_genotype(
     loci_file: Path,
-    depth_file: Path,
+    depth_file: Optional[Path],
     cns_file: Path,
     output: Path,
     default_depth: int = 10,
