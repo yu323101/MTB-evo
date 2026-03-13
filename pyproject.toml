@@ -37,7 +37,7 @@ dev = [
 ]
 
 [project.scripts]
-mtb-evo = "src.mtb_evo.cli:main"
+mtb-evo = "src.cli:main"
 
 [tool.hatch.build.targets.wheel]
 packages = ["src"]
