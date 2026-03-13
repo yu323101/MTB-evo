@@ -108,7 +108,7 @@ class MTBPipeline:
             self._log("Please activate conda environment: conda activate mtb-evo")
             sys.exit(1)
         
-        pair_script = self.script_dir / "scripts" / "pair_fixed_nostrandbias.py"
+        pair_script = self.script_dir / "src" / "scripts" / "pair_fixed_nostrandbias.py"
         
         if not pair_script.exists():
             self._log(f"Script not found: {pair_script}")
