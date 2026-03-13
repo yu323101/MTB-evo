@@ -146,8 +146,11 @@ class MTBPipeline:
             stdout, stderr = process.communicate(input='y\n', timeout=600)
             
             if process.returncode != 0:
-                self._log(f"Script failed with error:")
-                self._log(stderr)
+                self._log(f"Script failed with return code: {process.returncode}")
+                self._log(f"Error output:")
+                self._log(stderr if stderr else "(no stderr)")
+                self._log(f"Standard output:")
+                self._log(stdout if stdout else "(no stdout)")
                 sys.exit(1)
             
             if stdout:
