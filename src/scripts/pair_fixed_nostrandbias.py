@@ -43,8 +43,9 @@ def find_script(script_name):
 
 def find_data_file(filename):
     """Find data file in data/ directory."""
+    # 从 src/scripts/ 向上找到项目根目录
     script_dir = Path(__file__).parent
-    data_path = script_dir.parent / "data" / filename
+    data_path = script_dir.parent.parent / "data" / filename
     if data_path.exists():
         return str(data_path)
     else:
@@ -56,8 +57,9 @@ def find_data_file(filename):
 
 def check_bowtie2_index(ref_fasta, bowtie2_path):
     """Check if bowtie2 index exists, create if needed."""
+    # 从 src/scripts/ 向上找到项目根目录
     script_dir = Path(__file__).parent
-    index_dir = script_dir.parent / "data" / "bowtie2_index"
+    index_dir = script_dir.parent.parent / "data" / "bowtie2_index"
     index_prefix = index_dir / "tb_h37rv.fasta"
 
     # Check if index files exist
