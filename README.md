@@ -99,25 +99,45 @@ mtb-evo run-all --samples samples.txt --output-dir results/
 
 如果你想控制每一步，或某一步出错需要重跑：
 
-#### Step 1-2: SNP Calling（变异检测）
+#### Step 1: 生成 SNP Calling 脚本
 
 ```bash
 # 生成 SNP calling 脚本
 # 默认使用 50% CPU 核心，可自定义：--threads 32 --sort-threads 16
 python3 scripts/pair_fixed_nostrandbias.py local_test/samples.txt
 
-# 执行脚本（后台运行，耗时最长）
+# 检查生成的脚本
+cat results/pair_end.sh
+```
+
+**输出**：`results/pair_end.sh`（可执行的 bash 脚本）
+
+**脚本内容检查**：
+- 自动检测工具路径（sickle, bowtie2, samtools, java）
+- 自动创建 bowtie2 索引（首次运行）
+- 使用多线程（默认 50% CPU 核心）
+
+#### Step 2: 执行 SNP Calling（后台运行）
+
+```bash
 cd results
+
+# 后台执行（推荐，耗时 2-4 小时）
 nohup bash pair_end.sh > pair_end.log 2>&1 &
 
 # 查看进度
 tail -f pair_end.log
+
+# 检查是否完成
+ls *.snp | wc -l  # 应该等于样本数
 ```
 
 **输出文件**：
 - `*.snp` - SNP 检测结果
 - `*.cns` - 一致性序列
 - `*.sort.bam` - 排序后的比对文件
+
+**注意**：Step 2 耗时最长，建议在服务器上后台运行。
 
 #### Step 3: 提取差异位点
 
@@ -219,7 +239,8 @@ snakemake --cores 4
 
 | 步骤 | 命令 | 结果 | 耗时 |
 |------|------|------|------|
-| Step 1-2 | SNP calling | 1423 SNPs (MD601), 1400 SNPs (MD602) | ~2 小时 |
+| Step 1 | 生成脚本 | pair_end.sh | <1 分钟 |
+| Step 2 | SNP calling | 1423 SNPs (MD601), 1400 SNPs (MD602) | ~2 小时 |
 | Step 3 | diff-loci | 224 差异位点 / 1348 总位点 | <1 分钟 |
 | Step 4 | recall | 2 个样本基因型召回成功 | <1 分钟 |
 | Step 5 | merge | 2 个文件合并成功 | <1 分钟 |
@@ -233,11 +254,13 @@ snakemake --cores 4
 # 1. 环境准备
 conda activate mtb-evocd /home/nmx/mtb-evo
 
-# 2. SNP Calling（使用 24 线程）
+# 2. Step 1: 生成脚本
 python3 scripts/pair_fixed_nostrandbias.py local_test/samples.txt
+
+# 3. Step 2: 执行 SNP calling（后台运行）
 cd results && nohup bash pair_end.sh > pair_end.log 2>&1 &
 
-# 3. 等待 Step 2 完成后，继续后续步骤
+# 4. 等待 Step 2 完成后，继续后续步骤
 cd /home/nmx/mtb-evo/results
 
 # Step 3: 差异位点提取
@@ -281,7 +304,7 @@ results/
 
 ## 🔧 单命令使用
 
-### Step 4: 提取差异位点
+### Step 3: 提取差异位点
 
 ```bash
 mtb-evo diff-loci --snp-dir . --output diff_location.list

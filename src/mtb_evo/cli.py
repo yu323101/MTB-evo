@@ -11,6 +11,7 @@ from mtb_evo.commands.merge import merge_cmd
 from mtb_evo.commands.wild_extract import wild_extract_cmd
 from mtb_evo.commands.filter import filter_cmd
 from mtb_evo.commands.distance import distance_cmd
+from mtb_evo.commands.run_all import run_all_cmd
 
 app = typer.Typer(
     name="mtb-evo",
@@ -25,6 +26,7 @@ app.command("merge")(merge_cmd)
 app.command("wild-extract")(wild_extract_cmd)
 app.command("filter")(filter_cmd)
 app.command("distance")(distance_cmd)
+app.command("run-all")(run_all_cmd)
 
 
 def main():
