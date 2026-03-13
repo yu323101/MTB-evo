@@ -167,8 +167,6 @@ Examples:
     
     # Find scripts and data files
     varscan_jar = find_script("VarScan.v2.3.9.jar")
-    ppe_filter_pl = find_script("0.1_PE_IS_filt_Rv.pl")
-    format_trans_pl = find_script("1_format_trans.pl")
     ppe_list = find_data_file("PPE_INS_loci_Rv.list")
     ref_fasta = find_data_file("tb_h37rv.fasta")
     ref_fai = find_data_file("tb_h37rv.fasta.fai")
@@ -258,8 +256,8 @@ if [ "$a" -ge 10 ] && (echo ${{coverage}} 0.95 | awk '!($1>=$2){{exit 1}}'); the
 	fi
 	{tools['java']} -jar {varscan_jar} mpileup2cns results/{strain_name}.pileup --min-coverage 3 --min-avg-qual 20 --min-var-freq 0.75 --strand-filter 0 --min-reads2 2 > results/{strain_name}.cns
 	awk -F '[:]' '{{if($9==0 || $10==0)$0="";else print $0}}' results/{strain_name}.varscan > results/{strain_name}.vars
-	perl {ppe_filter_pl} {ppe_list} results/{strain_name}.vars > results/{strain_name}.var.ppe
-	perl {format_trans_pl} results/{strain_name}.var.ppe > results/{strain_name}.var.for
+	mtb-evo ppe-filter --ppe-list {ppe_list} --input results/{strain_name}.vars --output results/{strain_name}.var.ppe
+	mtb-evo format-trans --input results/{strain_name}.var.ppe --output results/{strain_name}.var.for
 	cut -f2,3,4 results/{strain_name}.var.for > results/{strain_name}.snp
 	rm -f results/{strain_name}.sam results/{strain_name}.varscan results/{strain_name}.paired.bam results/{strain_name}_s.fastq results/{strain_name}_1.fastq results/{strain_name}_2.fastq results/{strain_name}.var.for results/{strain_name}.var.ppe results/{strain_name}.pileup
 	echo '[{i}/{len(strains)}] {strain_name} completed successfully'
