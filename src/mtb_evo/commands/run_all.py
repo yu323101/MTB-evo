@@ -179,20 +179,41 @@ def run_all(
     # Step 2: Run SNP calling (from script_dir, not output_dir)
     run_step2(output_dir, script_dir)
     
-    if foreground:
-        # Foreground mode: wait for Step 2 to complete
-        typer.echo("\n⏳ Waiting for Step 2 to complete...")
-        typer.echo(f"   Use 'tail -f {output_dir}/pair_end.log' to monitor progress")
-        while not check_step2_complete(output_dir, expected_samples):
-            time.sleep(30)
-        typer.echo("  ✓ Step 2 completed!")
-    else:
-        # Background mode (default): exit immediately
-        if not check_step2_complete(output_dir, expected_samples):
-            typer.echo("\n✓ Step 2 is running in background.")
-            typer.echo(f"   Monitor progress: tail -f {output_dir}/pair_end.log")
-            typer.echo(f"   Continue analysis: mtb-evo run-all --samples {samples} --foreground")
-            return  # Exit without running Steps 3-8
+    # Wait for Step 2 to complete (both foreground and background modes)
+    if not check_step2_complete(output_dir, expected_samples):
+        if foreground:
+            # Foreground mode: show simple waiting message
+            typer.echo("\n⏳ Waiting for Step 2 to complete...")
+            typer.echo(f"   Use 'tail -f {output_dir}/pair_end.log' to monitor progress")
+            while not check_step2_complete(output_dir, expected_samples):
+                time.sleep(30)
+            typer.echo("  ✓ Step 2 completed!")
+        else:
+            # Background mode: monitor with progress updates
+            typer.echo("\n⏳ Monitoring Step 2 progress...")
+            typer.echo("   This may take 2-4 hours. You can close this terminal.")
+            typer.echo(f"   Use 'tail -f {output_dir}/pair_end.log' to check progress.")
+            
+            # Monitor progress with updates
+            start_time = time.time()
+            last_count = 0
+            
+            while not check_step2_complete(output_dir, expected_samples):
+                # Check current progress
+                snp_files = list(output_dir.glob("*.snp"))
+                current_count = len(snp_files)
+                
+                # Show progress if changed
+                if current_count > last_count:
+                    elapsed = (time.time() - start_time) / 60
+                    typer.echo(f"   Progress: {current_count}/{expected_samples} samples completed ({elapsed:.1f} min)")
+                    last_count = current_count
+                
+                time.sleep(60)  # Check every minute
+            
+            elapsed = (time.time() - start_time) / 60
+            typer.echo(f"  ✓ Step 2 completed! ({elapsed:.1f} min)")
+            typer.echo("  Continuing with Steps 3-8...")
     
     # Import commands for Steps 3-8
     from mtb_evo.commands.diff_loci import diff_loci_cmd
