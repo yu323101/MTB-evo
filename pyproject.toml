@@ -37,10 +37,10 @@ dev = [
 ]
 
 [project.scripts]
-mtb-evo = "mtb_evo.cli:main"
+mtb-evo = "src.mtb_evo.cli:main"
 
 [tool.hatch.build.targets.wheel]
-packages = ["src/mtb_evo"]
+packages = ["src"]
 
 [tool.black]
 line-length = 100
@@ -50,6 +50,4 @@ target-version = ['py39']
 line-length = 100
 select = ["E", "F", "I"]
 
-[tool.pytest.ini_options]
-testpaths = ["tests"]
-python_files = ["test_*.py"]
+

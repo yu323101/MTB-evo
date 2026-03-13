@@ -236,13 +236,13 @@ class MTBPipeline:
     def run_step3(self):
         """Step 3: Extract differential loci."""
         self._log("[3/8] Step 3: Extracting differential loci...")
-        from mtb_evo.commands.diff_loci import diff_loci_cmd
+        from src.commands.diff_loci import diff_loci_cmd
         diff_loci_cmd(Path("."), Path("diff_loci.txt"))
     
     def run_step4(self):
         """Step 4: Recall genotypes."""
         self._log("\n[4/8] Step 4: Recalling genotypes...")
-        from mtb_evo.commands.recall import recall_genotype
+        from src.commands.recall import recall_genotype
         cns_files = list(Path(".").glob("*.cns"))
         for cns_file in cns_files:
             output_name = cns_file.stem.replace(".cns", "") + ".recall.fasta"
@@ -251,13 +251,13 @@ class MTBPipeline:
     def run_step5(self):
         """Step 5: Merge sequences."""
         self._log("\n[5/8] Step 5: Merging sequences...")
-        from mtb_evo.commands.merge import merge_cmd
+        from src.commands.merge import merge_cmd
         merge_cmd(Path("."), Path("merged.fasta"))
     
     def run_step6(self):
         """Step 6: Extract wild-type bases."""
         self._log("\n[6/8] Step 6: Extracting wild-type bases...")
-        from mtb_evo.commands.wild_extract import wild_extract_cmd
+        from src.commands.wild_extract import wild_extract_cmd
         ancestor = Path("../data/tb.ancestor.fasta")
         if not ancestor.exists():
             ancestor = Path("data/tb.ancestor.fasta")
@@ -266,13 +266,13 @@ class MTBPipeline:
     def run_step7(self):
         """Step 7: Filter core SNPs."""
         self._log("\n[7/8] Step 7: Filtering core SNPs...")
-        from mtb_evo.commands.filter import filter_cmd
+        from src.commands.filter import filter_cmd
         filter_cmd(Path("wildtype.fasta"), Path("merged.fasta"), 5, "core_snps")
     
     def run_step8(self):
         """Step 8: Calculate pairwise distances."""
         self._log("\n[8/8] Step 8: Calculating pairwise distances...")
-        from mtb_evo.commands.distance import distance_cmd
+        from src.commands.distance import distance_cmd
         bak_files = list(Path(".").glob("*.bak.fa"))
         if bak_files:
             distance_cmd(bak_files[0], Path("distance_matrix.txt"))

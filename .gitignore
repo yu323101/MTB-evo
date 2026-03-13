@@ -39,6 +39,9 @@ tests/*.pyc
 .coverage
 htmlcov/
 
+# 本地测试数据（大文件）
+local_test/
+
 # 大文件（不上传）
 test_data/raw/*.cns
 test_data/raw/tb_h37rv.fasta

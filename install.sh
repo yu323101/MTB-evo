@@ -48,7 +48,7 @@ echo ""
 
 # 下载VarScan
 echo "⬇️  下载VarScan..."
-bash scripts/download_varscan.sh
+bash src/scripts/download_varscan.sh
 echo ""
 
 # 检查安装

@@ -6,7 +6,7 @@ from pathlib import Path
 import typer
 from typer import Option
 
-from mtb_evo.core.pipeline import MTBPipeline
+from src.core.pipeline import MTBPipeline
 
 
 def run_all_cmd(
