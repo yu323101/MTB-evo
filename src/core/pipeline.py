@@ -55,14 +55,19 @@ class MTBPipeline:
         timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
         self.log_file = self.output_dir / f"run_all_{timestamp}.log"
         
-        # Initialize logging (will be set up after daemonize)
-        self.logger = None
-        
         # Initialize tool manager
         self.tool_manager = ToolManager()
+        
+        # Initialize logging immediately (will be reconfigured after daemonize if needed)
+        self.logger = setup_logging(
+            log_file=self.log_file,
+            verbose=self.verbose,
+            console_output=True
+        )
     
     def setup_logging(self, console_output: bool = True):
         """Setup logging after daemonize."""
+        # Reconfigure existing logger
         self.logger = setup_logging(
             log_file=self.log_file,
             verbose=self.verbose,
@@ -116,7 +121,6 @@ class MTBPipeline:
     
     def validate_inputs(self) -> bool:
         """Validate all required inputs."""
-        self._ensure_logger()
         
         if not self.samples.exists():
             raise FileNotFoundError(f"Sample list not found: {self.samples}")
@@ -130,7 +134,6 @@ class MTBPipeline:
     
     def run_step1(self):
         """Step 1: Generate SNP calling script."""
-        self._ensure_logger()
         self.logger.info("[1/8] Step 1: Generating SNP calling script...")
         
         pair_script = self.script_dir / "src" / "scripts" / "pair_fixed_nostrandbias.py"
@@ -191,7 +194,6 @@ class MTBPipeline:
     
     def run_step2_daemon(self):
         """Step 2: Run SNP calling as daemon."""
-        self._ensure_logger()
         self.logger.info("[2/8] Step 2: Running SNP calling (daemon mode)")
         
         script_path = self.output_dir / "pair_end.sh"
@@ -231,7 +233,6 @@ class MTBPipeline:
     
     def monitor_step2(self, expected_count: int):
         """Monitor Step 2 progress until completion."""
-        self._ensure_logger()
         self.logger.info("Monitoring Step 2 progress...")
         self.logger.info("  This may take 2-4 hours.")
         
@@ -258,7 +259,6 @@ class MTBPipeline:
     
     def run_step3(self):
         """Step 3: Extract differential loci."""
-        self._ensure_logger()
         self.logger.info("[3/8] Step 3: Extracting differential loci...")
         from src.commands.diff_loci import diff_loci_cmd
         diff_loci_cmd(Path("."), Path("diff_loci.txt"))
@@ -266,7 +266,6 @@ class MTBPipeline:
     
     def run_step4(self):
         """Step 4: Recall genotypes."""
-        self._ensure_logger()
         self.logger.info("[4/8] Step 4: Recalling genotypes...")
         from src.commands.recall import recall_genotype
         
@@ -286,7 +285,6 @@ class MTBPipeline:
     
     def run_step5(self):
         """Step 5: Merge sequences."""
-        self._ensure_logger()
         self.logger.info("[5/8] Step 5: Merging sequences...")
         from src.commands.merge import merge_cmd
         merge_cmd(Path("."), Path("merged.fasta"))
@@ -294,7 +292,6 @@ class MTBPipeline:
     
     def run_step6(self):
         """Step 6: Extract wild-type bases."""
-        self._ensure_logger()
         self.logger.info("[6/8] Step 6: Extracting wild-type bases...")
         from src.commands.wild_extract import wild_extract_cmd
         
@@ -307,7 +304,6 @@ class MTBPipeline:
     
     def run_step7(self):
         """Step 7: Filter core SNPs."""
-        self._ensure_logger()
         self.logger.info("[7/8] Step 7: Filtering core SNPs...")
         from src.commands.filter import filter_cmd
         filter_cmd(Path("wildtype.fasta"), Path("merged.fasta"), 5, "core_snps")
@@ -315,7 +311,6 @@ class MTBPipeline:
     
     def run_step8(self):
         """Step 8: Calculate pairwise distances."""
-        self._ensure_logger()
         self.logger.info("[8/8] Step 8: Calculating pairwise distances...")
         from src.commands.distance import distance_cmd
         

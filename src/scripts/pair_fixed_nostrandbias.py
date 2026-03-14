@@ -15,9 +15,14 @@ import shutil
 import sys
 from pathlib import Path
 
+# Add parent directory to path for imports
+sys.path.insert(0, str(Path(__file__).parent.parent.parent))
+
+from src.utils.tools import ToolManager
+
 
 def find_tool(tool_name, required=True):
-    """Find tool in PATH."""
+    """Find tool in PATH (legacy function, kept for compatibility)."""
     path = shutil.which(tool_name)
     if path:
         return path
@@ -158,13 +163,19 @@ Examples:
     bowtie_threads = args.threads
     sort_threads = args.sort_threads or max(1, bowtie_threads // 2)
     
-    # Auto-detect tool paths
+    # Auto-detect tool paths using ToolManager
     print("Detecting tools...")
+    tool_manager = ToolManager()
+    
+    if not tool_manager.validate_all():
+        sys.exit(1)
+    
+    # Get tool paths
     tools = {
-        'sickle': find_tool('sickle'),
-        'bowtie2': find_tool('bowtie2'),
-        'samtools': find_tool('samtools'),
-        'java': find_tool('java'),
+        'sickle': str(tool_manager.get_path('sickle')),
+        'bowtie2': str(tool_manager.get_path('bowtie2')),
+        'samtools': str(tool_manager.get_path('samtools')),
+        'java': str(tool_manager.get_path('java')),
     }
     
     # Find scripts and data files
