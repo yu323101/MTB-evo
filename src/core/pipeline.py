@@ -1,4 +1,4 @@
-"""MTB-Evo pipeline core class."""
+"""MTB-Evo pipeline core class with optimized implementation."""
 
 import os
 import subprocess
@@ -6,12 +6,30 @@ import sys
 import time
 from datetime import datetime
 from pathlib import Path
+from typing import Optional
+
+from src.config import PipelineConfig
+from src.exceptions import (
+    FileNotFoundError,
+    MTBEvoError,
+    PipelineError,
+    ToolNotFoundError,
+)
+from src.utils.logging_config import setup_logging
+from src.utils.tools import ToolManager
 
 
 class MTBPipeline:
     """MTB-Evo analysis pipeline with daemon mode support."""
     
-    def __init__(self, samples: Path, output_dir: Path, threads: int = 4, sort_threads: int = 2):
+    def __init__(
+        self,
+        samples: Path,
+        output_dir: Path = Path("results"),
+        threads: int = 4,
+        sort_threads: int = 2,
+        verbose: bool = False
+    ):
         """Initialize pipeline.
         
         Args:
@@ -19,28 +37,37 @@ class MTBPipeline:
             output_dir: Output directory path
             threads: Number of threads for bowtie2
             sort_threads: Number of threads for samtools sort
+            verbose: Enable debug logging
         """
         self.samples = samples.absolute()
         self.output_dir = output_dir.absolute()
         self.threads = threads
         self.sort_threads = sort_threads
-        # 计算项目根目录：src/core/pipeline.py -> src/ -> 项目根目录
+        self.verbose = verbose
+        
+        # 计算项目根目录
         self.script_dir = Path(__file__).parent.parent.parent
-        self.log_file = None
-        self.log_f = None
         
         # Create output directory
         self.output_dir.mkdir(parents=True, exist_ok=True)
         
-        # Setup log file path (before any chdir)
+        # Setup log file
         timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
         self.log_file = self.output_dir / f"run_all_{timestamp}.log"
+        
+        # Initialize logging (will be set up after daemonize)
+        self.logger = None
+        
+        # Initialize tool manager
+        self.tool_manager = ToolManager()
     
-    def _log(self, message: str):
-        """Write message to log file."""
-        if self.log_f:
-            self.log_f.write(message + "\n")
-            self.log_f.flush()
+    def setup_logging(self, console_output: bool = True):
+        """Setup logging after daemonize."""
+        self.logger = setup_logging(
+            log_file=self.log_file,
+            verbose=self.verbose,
+            console_output=console_output
+        )
     
     def daemonize(self):
         """Daemonize the process using double-fork technique."""
@@ -57,10 +84,10 @@ class MTBPipeline:
         
         # Child process
         os.chdir(self.output_dir)
-        os.setsid()  # Create new session
+        os.setsid()
         os.umask(0)
         
-        # Second fork to prevent zombie processes
+        # Second fork
         try:
             pid = os.fork()
             if pid > 0:
@@ -70,7 +97,6 @@ class MTBPipeline:
             sys.exit(1)
         
         # Grandchild process (actual daemon)
-        # Redirect stdio to /dev/null
         sys.stdout.flush()
         sys.stderr.flush()
         
@@ -80,57 +106,48 @@ class MTBPipeline:
             os.dup2(f.fileno(), sys.stdout.fileno())
             os.dup2(f.fileno(), sys.stderr.fileno())
         
-        # Open log file in daemon
-        if self.log_file is not None:
-            self.log_f = open(self.log_file, 'w')
+        # Setup logging in daemon (no console output)
+        self.setup_logging(console_output=False)
     
-    def check_tools(self):
-        """Check if required tools are available."""
-        tools = ["sickle", "bowtie2", "samtools", "java"]
-        missing = []
-        for tool in tools:
-            result = subprocess.run(
-                ["which", tool],
-                capture_output=True,
-                text=True
-            )
-            if result.returncode != 0:
-                missing.append(tool)
-        return missing
+    def _ensure_logger(self):
+        """Ensure logger is initialized."""
+        if self.logger is None:
+            self.setup_logging(console_output=True)
+    
+    def validate_inputs(self) -> bool:
+        """Validate all required inputs."""
+        self._ensure_logger()
+        
+        if not self.samples.exists():
+            raise FileNotFoundError(f"Sample list not found: {self.samples}")
+        
+        # Validate tools
+        if not self.tool_manager.validate_all():
+            missing = self.tool_manager.check_required()
+            raise ToolNotFoundError(missing)
+        
+        return True
     
     def run_step1(self):
         """Step 1: Generate SNP calling script."""
-        self._log("[1/8] Step 1: Generating SNP calling script...")
-        
-        missing = self.check_tools()
-        if missing:
-            self._log(f"Missing tools: {', '.join(missing)}")
-            self._log("Please activate conda environment: conda activate mtb-evo")
-            sys.exit(1)
+        self._ensure_logger()
+        self.logger.info("[1/8] Step 1: Generating SNP calling script...")
         
         pair_script = self.script_dir / "src" / "scripts" / "pair_fixed_nostrandbias.py"
         
         if not pair_script.exists():
-            self._log(f"Script not found: {pair_script}")
-            sys.exit(1)
+            raise FileNotFoundError(f"Script not found: {pair_script}")
         
-        if not self.samples.exists():
-            self._log(f"Sample list not found: {self.samples}")
-            sys.exit(1)
-        
-        self._log(f"  Using script: {pair_script}")
-        self._log(f"  Using samples: {self.samples}")
+        self.logger.debug(f"Using script: {pair_script}")
+        self.logger.debug(f"Using samples: {self.samples}")
         
         cmd = [
-            "python3", 
+            "python3",
             str(pair_script),
             str(self.samples),
+            "--threads", str(self.threads),
+            "--sort-threads", str(self.sort_threads)
         ]
-        
-        if self.threads:
-            cmd.extend(["--threads", str(self.threads)])
-        if self.sort_threads:
-            cmd.extend(["--sort-threads", str(self.sort_threads)])
         
         process = None
         try:
@@ -146,44 +163,42 @@ class MTBPipeline:
             stdout, stderr = process.communicate(input='y\n', timeout=600)
             
             if process.returncode != 0:
-                self._log(f"Script failed with return code: {process.returncode}")
-                self._log(f"Error output:")
-                self._log(stderr if stderr else "(no stderr)")
-                self._log(f"Standard output:")
-                self._log(stdout if stdout else "(no stdout)")
-                sys.exit(1)
+                raise PipelineError(
+                    f"Script failed with return code {process.returncode}",
+                    step=1,
+                    details={"stderr": stderr, "stdout": stdout}
+                )
             
+            # Log stdout
             if stdout:
-                for line in stdout.split('\n'):
+                for line in stdout.strip().split('\n'):
                     if line.strip():
-                        self._log(f"    {line}")
+                        self.logger.debug(f"  {line}")
             
-            self._log("  Generated: results/pair_end.sh")
-            self._log("  Tools detected: sickle, bowtie2, samtools, java, VarScan")
+            self.logger.info("  ✓ Generated: results/pair_end.sh")
             
+            # Count samples
             with open(self.samples) as f:
                 strain_count = len([line for line in f if line.strip()])
-            self._log(f"  Found {strain_count} strains to process")
+            self.logger.info(f"  ✓ Found {strain_count} strains to process")
             
         except subprocess.TimeoutExpired:
-            self._log("Timeout: Script took too long (>10 minutes)")
             if process:
                 process.kill()
-            sys.exit(1)
+            raise PipelineError("Script execution timeout (>10 minutes)", step=1)
         except subprocess.CalledProcessError as e:
-            self._log(f"Failed to generate script: {e}")
-            sys.exit(1)
+            raise PipelineError(f"Script failed: {e}", step=1) from e
     
     def run_step2_daemon(self):
         """Step 2: Run SNP calling as daemon."""
-        self._log("\n[2/8] Step 2: Running SNP calling (daemon mode)")
+        self._ensure_logger()
+        self.logger.info("[2/8] Step 2: Running SNP calling (daemon mode)")
         
         script_path = self.output_dir / "pair_end.sh"
         log_path = self.output_dir / "pair_end.log"
         
         if not script_path.exists():
-            self._log(f"Script not found: {script_path}")
-            sys.exit(1)
+            raise FileNotFoundError(f"Script not found: {script_path}")
         
         # Check if already running
         result = subprocess.run(
@@ -192,9 +207,9 @@ class MTBPipeline:
         )
         
         if result.returncode == 0:
-            self._log("  SNP calling is already running")
+            self.logger.warning("  SNP calling is already running")
         else:
-            # Start as daemon using nohup
+            # Start as daemon
             with open(log_path, "w") as log_file:
                 subprocess.Popen(
                     ["nohup", "bash", str(script_path)],
@@ -204,10 +219,10 @@ class MTBPipeline:
                     cwd=self.script_dir,
                     start_new_session=True
                 )
-            self._log(f"  Started daemon: {script_path}")
+            self.logger.info(f"  ✓ Started daemon: {script_path}")
         
-        self._log(f"  Log file: {log_path}")
-        self._log("  This step may take 2-4 hours.")
+        self.logger.info(f"  Log file: {log_path}")
+        self.logger.info("  This step may take 2-4 hours.")
     
     def check_step2_complete(self, expected_count: int) -> bool:
         """Check if Step 2 is complete by counting .snp files."""
@@ -216,8 +231,9 @@ class MTBPipeline:
     
     def monitor_step2(self, expected_count: int):
         """Monitor Step 2 progress until completion."""
-        self._log("\nMonitoring Step 2 progress...")
-        self._log("   This may take 2-4 hours.")
+        self._ensure_logger()
+        self.logger.info("Monitoring Step 2 progress...")
+        self.logger.info("  This may take 2-4 hours.")
         
         start_time = time.time()
         last_count = 0
@@ -228,80 +244,106 @@ class MTBPipeline:
             
             if current_count > last_count:
                 elapsed = (time.time() - start_time) / 60
-                self._log(f"   Progress: {current_count}/{expected_count} samples completed ({elapsed:.1f} min)")
+                self.logger.info(
+                    f"  Progress: {current_count}/{expected_count} samples "
+                    f"completed ({elapsed:.1f} min)"
+                )
                 last_count = current_count
             
             time.sleep(60)
         
         elapsed = (time.time() - start_time) / 60
-        self._log(f"  Step 2 completed! ({elapsed:.1f} min)")
-        self._log("  Continuing with Steps 3-8...\n")
+        self.logger.info(f"  ✓ Step 2 completed! ({elapsed:.1f} min)")
+        self.logger.info("  Continuing with Steps 3-8...")
     
     def run_step3(self):
         """Step 3: Extract differential loci."""
-        self._log("[3/8] Step 3: Extracting differential loci...")
+        self._ensure_logger()
+        self.logger.info("[3/8] Step 3: Extracting differential loci...")
         from src.commands.diff_loci import diff_loci_cmd
         diff_loci_cmd(Path("."), Path("diff_loci.txt"))
+        self.logger.info("  ✓ Step 3 completed")
     
     def run_step4(self):
         """Step 4: Recall genotypes."""
-        self._log("\n[4/8] Step 4: Recalling genotypes...")
+        self._ensure_logger()
+        self.logger.info("[4/8] Step 4: Recalling genotypes...")
         from src.commands.recall import recall_genotype
+        
         cns_files = list(Path(".").glob("*.cns"))
-        for cns_file in cns_files:
+        if not cns_files:
+            self.logger.warning("  No CNS files found")
+            return
+        
+        for i, cns_file in enumerate(cns_files, 1):
             output_name = cns_file.stem.replace(".cns", "") + ".recall.fasta"
-            recall_genotype(Path("diff_loci.txt"), None, cns_file, Path(output_name))
+            try:
+                recall_genotype(Path("diff_loci.txt"), None, cns_file, Path(output_name))
+                self.logger.info(f"  ✓ [{i}/{len(cns_files)}] {cns_file.name}")
+            except Exception as e:
+                self.logger.error(f"  ✗ [{i}/{len(cns_files)}] {cns_file.name}: {e}")
+                raise PipelineError(f"Failed to recall {cns_file.name}", step=4) from e
     
     def run_step5(self):
         """Step 5: Merge sequences."""
-        self._log("\n[5/8] Step 5: Merging sequences...")
+        self._ensure_logger()
+        self.logger.info("[5/8] Step 5: Merging sequences...")
         from src.commands.merge import merge_cmd
         merge_cmd(Path("."), Path("merged.fasta"))
+        self.logger.info("  ✓ Step 5 completed")
     
     def run_step6(self):
         """Step 6: Extract wild-type bases."""
-        self._log("\n[6/8] Step 6: Extracting wild-type bases...")
+        self._ensure_logger()
+        self.logger.info("[6/8] Step 6: Extracting wild-type bases...")
         from src.commands.wild_extract import wild_extract_cmd
+        
         ancestor = Path("../data/tb.ancestor.fasta")
         if not ancestor.exists():
             ancestor = Path("data/tb.ancestor.fasta")
+        
         wild_extract_cmd(Path("diff_loci.txt"), ancestor, Path("wildtype.fasta"))
+        self.logger.info("  ✓ Step 6 completed")
     
     def run_step7(self):
         """Step 7: Filter core SNPs."""
-        self._log("\n[7/8] Step 7: Filtering core SNPs...")
+        self._ensure_logger()
+        self.logger.info("[7/8] Step 7: Filtering core SNPs...")
         from src.commands.filter import filter_cmd
         filter_cmd(Path("wildtype.fasta"), Path("merged.fasta"), 5, "core_snps")
+        self.logger.info("  ✓ Step 7 completed")
     
     def run_step8(self):
         """Step 8: Calculate pairwise distances."""
-        self._log("\n[8/8] Step 8: Calculating pairwise distances...")
+        self._ensure_logger()
+        self.logger.info("[8/8] Step 8: Calculating pairwise distances...")
         from src.commands.distance import distance_cmd
+        
         bak_files = list(Path(".").glob("*.bak.fa"))
         if bak_files:
             distance_cmd(bak_files[0], Path("distance_matrix.txt"))
+            self.logger.info("  ✓ Step 8 completed")
         else:
-            self._log("  No filtered alignment file found")
+            self.logger.warning("  No filtered alignment file found")
     
     def run_all(self):
-        """Run complete pipeline."""
+        """Run complete pipeline with error handling."""
         try:
+            # Validate inputs
+            self.validate_inputs()
+            
+            # Get expected sample count
             with open(self.samples) as f:
                 expected_samples = len([line for line in f if line.strip()])
             
-            # Step 1
+            # Run steps
             self.run_step1()
-            
-            # Step 2 (daemon)
             self.run_step2_daemon()
-            
-            # Wait for Step 2
             self.monitor_step2(expected_samples)
             
             # Change to output directory for remaining steps
             os.chdir(self.output_dir)
             
-            # Steps 3-8
             self.run_step3()
             self.run_step4()
             self.run_step5()
@@ -310,15 +352,26 @@ class MTBPipeline:
             self.run_step8()
             
             # Summary
-            self._log("\n" + "="*60)
-            self._log("Analysis completed successfully!")
-            self._log("="*60)
-            self._log(f"\nResults saved in: {self.output_dir}/")
-            self._log("\nKey output files:")
-            self._log("  - Core SNP alignment: *.bak.fa")
-            self._log("  - Distance matrix: distance_matrix.txt")
-            self._log("  - SNP results: *.snp files")
+            self.logger.info("=" * 60)
+            self.logger.info("🎉 Analysis completed successfully!")
+            self.logger.info("=" * 60)
+            self.logger.info(f"Results saved in: {self.output_dir}/")
+            self.logger.info("Key output files:")
+            self.logger.info("  • Core SNP alignment: *.bak.fa")
+            self.logger.info("  • Distance matrix: distance_matrix.txt")
+            self.logger.info("  • SNP results: *.snp files")
             
-        finally:
-            if self.log_f:
-                self.log_f.close()
+        except MTBEvoError as e:
+            # 优雅处理已知错误
+            if self.logger:
+                self.logger.error(f"Pipeline failed: {e}")
+            else:
+                print(f"Error: {e}", file=sys.stderr)
+            sys.exit(1)
+        except Exception as e:
+            # 未知错误，记录详细信息
+            if self.logger:
+                self.logger.exception("Unexpected error occurred")
+            else:
+                print(f"Unexpected error: {e}", file=sys.stderr)
+            sys.exit(1)
