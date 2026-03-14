@@ -31,7 +31,7 @@ reference:
 
 # 脚本路径
 scripts:
-  pair_fixed_nostrandbias: "scripts/pair_fixed_nostrandbias.py"
+  pair_fixed_nostrandbias: "src/scripts/pair_fixed_nostrandbias.py"
 
 # 外部工具路径（可选，如果已在PATH中可省略）
 tools:

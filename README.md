@@ -118,7 +118,7 @@ mtb-evo run-all --samples samples.txt --output-dir results/
 ```bash
 # 生成 SNP calling 脚本
 # 默认使用 50% CPU 核心，可自定义：--threads 32 --sort-threads 16
-python3 scripts/pair_fixed_nostrandbias.py local_test/samples.txt
+python3 src/scripts/pair_fixed_nostrandbias.py local_test/samples.txt
 
 # 检查生成的脚本
 cat results/pair_end.sh
@@ -226,18 +226,6 @@ mtb-evo distance \
 
 **输出**：`distance_matrix.txt`（样本间 SNP 距离矩阵）
 
-### 方式三：Snakemake 流程（批量处理）
-
-适合批量处理多个项目：
-
-```bash
-# 编辑配置文件
-vim config.yaml
-
-# 运行流程
-snakemake --cores 4
-```
-
 ---
 
 ## 📊 实际运行案例
@@ -269,7 +257,7 @@ snakemake --cores 4
 conda activate mtb-evocd /home/nmx/mtb-evo
 
 # 2. Step 1: 生成脚本
-python3 scripts/pair_fixed_nostrandbias.py local_test/samples.txt
+python3 src/scripts/pair_fixed_nostrandbias.py local_test/samples.txt
 
 # 3. Step 2: 执行 SNP calling（后台运行）
 cd results && nohup bash pair_end.sh > pair_end.log 2>&1 &
@@ -445,7 +433,7 @@ cd results && bash pair_end.sh
 **解决**:
 ```bash
 # 使用 --threads 和 --sort-threads 参数
-python3 scripts/pair_fixed_nostrandbias.py samples.txt --threads 32 --sort-threads 16
+python3 src/scripts/pair_fixed_nostrandbias.py samples.txt --threads 32 --sort-threads 16
 
 # 默认使用 50% CPU 核心
 # 例如 48 核服务器默认使用 24 线程
@@ -466,8 +454,8 @@ git config --global http.lowSpeedLimit 1000
 git config --global http.lowSpeedTime 300
 
 # 方法 2: 使用 wget/curl 下载单个文件（跳过证书验证）
-curl -k -o scripts/pair_fixed_nostrandbias.py \
-  https://raw.githubusercontent.com/yu323101/mtb-evo/main/scripts/pair_fixed_nostrandbias.py
+curl -k -o src/scripts/pair_fixed_nostrandbias.py \
+  https://raw.githubusercontent.com/yu323101/mtb-evo/main/src/scripts/pair_fixed_nostrandbias.py
 
 # 方法 3: 手动复制文件
 # 从其他设备下载后，通过 U 盘、邮件等方式传输到服务器
