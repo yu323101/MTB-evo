@@ -166,10 +166,16 @@ class MTBPipeline:
             stdout, stderr = process.communicate(input='y\n', timeout=600)
             
             if process.returncode != 0:
+                # 记录详细的错误信息
+                self.logger.error(f"Script failed with return code {process.returncode}")
+                if stderr:
+                    self.logger.error(f"Script stderr:\n{stderr}")
+                if stdout:
+                    self.logger.error(f"Script stdout:\n{stdout}")
                 raise PipelineError(
-                    f"Script failed with return code {process.returncode}",
-                    step=1,
-                    details={"stderr": stderr, "stdout": stdout}
+                    f"Script failed with return code {process.returncode}. "
+                    f"Check logs for details.",
+                    step=1
                 )
             
             # Log stdout
