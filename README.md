@@ -11,7 +11,6 @@
 
 - 预防医学研究人员
 - 基础医学研究人员
-- 公共卫生专业人员
 - **无需编程基础**，只需按步骤操作即可
 
 ## 📋 系统要求
@@ -80,7 +79,6 @@ mtb-evo run-all --samples samples.txt --output-dir results/ --foreground
 - 自动检测并创建 bowtie2 索引（首次运行）
 
 **后台运行模式（默认）**：
-- Step 2（SNP calling）在后台运行，立即返回命令行
 - 使用 `tail -f results/pair_end.log` 查看实时进度
 - 完成后重新运行相同命令继续后续步骤
 
@@ -293,7 +291,7 @@ results/
 ├── MD601.cleaned.cns              # CNS 文件
 ├── MD602.cleaned.snp
 ├── MD602.cleaned.cns
-├── diff_loci.txt                  # 224 差异位点
+├── diff_loci.txt                  # 差异位点
 ├── depth.txt                      # 深度阈值
 ├── MD601.recall.fasta             # 基因型召回
 ├── MD602.recall.fasta
@@ -441,34 +439,14 @@ python3 src/scripts/pair_fixed_nostrandbias.py samples.txt --threads 32 --sort-t
 
 ## 🛠️ 故障排除
 
-### 错误 1: Git 操作超时或失败
-
-**症状**: `git pull`、`git fetch` 或 `git clone` 超时
-
-**原因**: 网络防火墙限制 HTTPS 连接
-
-**解决方法**:
-```bash
-# 方法 1: 增加 Git 超时时间
-git config --global http.lowSpeedLimit 1000
-git config --global http.lowSpeedTime 300
-
-# 方法 2: 使用 wget/curl 下载单个文件（跳过证书验证）
-curl -k -o src/scripts/pair_fixed_nostrandbias.py \
-  https://raw.githubusercontent.com/yu323101/mtb-evo/main/src/scripts/pair_fixed_nostrandbias.py
-
-# 方法 3: 手动复制文件
-# 从其他设备下载后，通过 U 盘、邮件等方式传输到服务器
-```
-
-### 错误 2: "VarScan not found"
+### 错误 1: "VarScan not found"
 
 ```bash
 # 解决：下载 VarScan
 bash scripts/download_varscan.sh
 ```
 
-### 错误 3: "No .fas or .fasta files found"
+### 错误 2: "No .fas or .fasta files found"
 
 **原因**: merge 命令找不到输入文件
 
@@ -481,7 +459,7 @@ ls *.fas *.fasta 2>/dev/null
 mtb-evo merge --fas-dir . --output merged.fasta
 ```
 
-### 错误 4: "command not found: mtb-evo"
+### 错误 3: "command not found: mtb-evo"
 
 ```bash
 # 解决：激活环境
@@ -491,7 +469,7 @@ conda activate mtb-evo
 which mtb-evo
 ```
 
-### 错误 5: "Out of memory"
+### 错误 4: "Out of memory"
 
 **原因**: 内存不足
 
