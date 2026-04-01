@@ -1,4 +1,4 @@
-# MTB-Evo: 结核杆菌进化分析工具包
+# MX-Evo: 结核杆菌进化分析工具包
 
 [![Python 3.9+](https://img.shields.io/badge/python-3.9+-blue.svg)](https://www.python.org/downloads/)
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](https://opensource.org/licenses/MIT)
