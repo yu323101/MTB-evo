@@ -160,9 +160,3 @@ snakemake --snakefile Snakefile --configfile config/config.yaml -n all
 
 1. 补充回归测试（图表/表格口径一致性）。
 2. 继续细化 core 规则并增强失败诊断日志。
-
-data/projects/nmx/mtb-evo/results/samples/MD001.cleaned/table/谱系鉴定结果_MD001.cleaned.csv
-data/projects/nmx/mtb-evo/results/samples/MD002.cleaned/table/谱系鉴定结果_MD002.cleaned.csv
-这两个谱系鉴定的结果失败了，需要修改。
-
-往git推送
