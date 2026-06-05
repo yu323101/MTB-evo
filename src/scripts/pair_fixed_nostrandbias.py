@@ -7,17 +7,44 @@ Usage: python3 pair_fixed_nostrandbias.py <strain_list.txt> [--threads N] [--sor
 Example strain list format:
 MD601.cleaned
 MD602.cleaned
+
+Example samplesheet format:
+sample_id,r1,r2
+MD601.cleaned,/data/MD601.cleaned_1.fastq.gz,/data/MD601.cleaned_2.fastq.gz
 """
 
 import argparse
+import csv
 import os
+import shlex
 import shutil
+import subprocess
 import sys
 from pathlib import Path
 
+# Add parent directory to path for imports
+sys.path.insert(0, str(Path(__file__).parent.parent.parent))
+
+from src.utils.tools import ToolManager
+
+REFERENCE_PROFILES = {
+    "tb_ancestor": {
+        "fasta": "tb.ancestor.fasta",
+        "fai": "tb.ancestor.fasta.fai",
+        "bowtie2_index_prefix": "tb.ancestor.fasta",
+        "genome_length": 4411532,
+    },
+    "tb_h37rv": {
+        "fasta": "tb_h37rv.fasta",
+        "fai": "tb_h37rv.fasta.fai",
+        "bowtie2_index_prefix": "tb_h37rv.fasta",
+        "genome_length": 4411532,
+    },
+}
+
 
 def find_tool(tool_name, required=True):
-    """Find tool in PATH."""
+    """Find tool in PATH (legacy function, kept for compatibility)."""
     path = shutil.which(tool_name)
     if path:
         return path
@@ -55,12 +82,10 @@ def find_data_file(filename):
         sys.exit(1)
 
 
-def check_bowtie2_index(ref_fasta, bowtie2_path):
+def check_bowtie2_index(ref_fasta, bowtie2_path, index_prefix):
     """Check if bowtie2 index exists, create if needed."""
-    # 从 src/scripts/ 向上找到项目根目录
-    script_dir = Path(__file__).parent
-    index_dir = script_dir.parent.parent / "data" / "bowtie2_index"
-    index_prefix = index_dir / "tb_h37rv.fasta"
+    index_prefix = Path(index_prefix).resolve()
+    index_dir = index_prefix.parent
 
     # Check if index files exist
     index_files = [
@@ -93,7 +118,6 @@ def check_bowtie2_index(ref_fasta, bowtie2_path):
                     print("Please ensure bowtie2 is properly installed")
                     sys.exit(1)
 
-            import subprocess
             cmd = [
                 bowtie2_build,
                 ref_fasta,
@@ -110,8 +134,8 @@ def check_bowtie2_index(ref_fasta, bowtie2_path):
                 sys.exit(1)
         else:
             print("Aborted. To create index manually, run:")
-            print(f"  mkdir -p data/bowtie2_index")
-            print(f"  bowtie2-build {ref_fasta} data/bowtie2_index/tb_h37rv.fasta")
+            print(f"  mkdir -p {index_dir}")
+            print(f"  bowtie2-build {ref_fasta} {index_prefix}")
             sys.exit(1)
 
     return str(index_prefix)
@@ -126,6 +150,52 @@ def get_default_threads():
         return 4
 
 
+def parse_samples_input(sample_input: str):
+    """Parse legacy list or CSV samplesheet.
+
+    Legacy format (one prefix/path per line):
+      SampleA
+      /path/to/SampleB
+
+    CSV format:
+      sample_id,r1,r2
+      SampleA,/path/SampleA_1.fastq.gz,/path/SampleA_2.fastq.gz
+    """
+    path = Path(sample_input)
+    if not path.exists():
+        raise FileNotFoundError(sample_input)
+
+    with open(path, "r", encoding="utf-8") as f:
+        first = f.readline().strip()
+
+    rows = []
+    if "," in first and "sample_id" in first.lower() and "r1" in first.lower() and "r2" in first.lower():
+        with open(path, "r", encoding="utf-8") as f:
+            reader = csv.DictReader(f)
+            for row in reader:
+                sample_id = (row.get("sample_id") or "").strip()
+                r1 = (row.get("r1") or "").strip()
+                r2 = (row.get("r2") or "").strip()
+                if not sample_id or not r1 or not r2:
+                    continue
+                rows.append({"sample_id": sample_id, "r1": r1, "r2": r2})
+    else:
+        with open(path, "r", encoding="utf-8") as f:
+            for line in f:
+                prefix = line.strip()
+                if not prefix:
+                    continue
+                sample_id = os.path.basename(prefix)
+                rows.append(
+                    {
+                        "sample_id": sample_id,
+                        "r1": f"{prefix}_1.fastq.gz",
+                        "r2": f"{prefix}_2.fastq.gz",
+                    }
+                )
+    return rows
+
+
 def main():
     parser = argparse.ArgumentParser(
         description='Generate SNP calling pipeline script',
@@ -135,10 +205,11 @@ Examples:
   python3 pair_fixed_nostrandbias.py samples.txt
   python3 pair_fixed_nostrandbias.py samples.txt --threads 16
   python3 pair_fixed_nostrandbias.py samples.txt --threads 16 --sort-threads 8
+  python3 pair_fixed_nostrandbias.py samples.txt --results-dir /path/to/results --script-path /path/to/results/logs/workflow/pair_end.sh
         """
     )
     
-    parser.add_argument('strain_list', help='File containing list of strains')
+    parser.add_argument('strain_list', help='Sample input file (legacy list or CSV samplesheet)')
     parser.add_argument(
         '--threads', '-t',
         type=int,
@@ -151,61 +222,148 @@ Examples:
         default=None,
         help='Number of threads for samtools sort (default: threads/2)'
     )
+    parser.add_argument(
+        "--reference-profile",
+        choices=sorted(REFERENCE_PROFILES.keys()),
+        default="tb_ancestor",
+        help="Reference profile (default: tb_ancestor)",
+    )
+    parser.add_argument(
+        "--reference-fasta",
+        default=None,
+        help="Override reference FASTA path",
+    )
+    parser.add_argument(
+        "--reference-fai",
+        default=None,
+        help="Override reference FASTA index (.fai) path",
+    )
+    parser.add_argument(
+        "--bowtie2-index",
+        default=None,
+        help="Override bowtie2 index prefix path",
+    )
+    parser.add_argument(
+        "--genome-length",
+        type=int,
+        default=None,
+        help="Override genome length used by coverage gate (default from profile)",
+    )
+    parser.add_argument(
+        '--results-dir',
+        default='results',
+        help='Results directory to write pipeline outputs into (default: results)'
+    )
+    parser.add_argument(
+        '--script-path',
+        default=None,
+        help='Path to write the generated shell workflow script (default: <results-dir>/pair_end.sh)'
+    )
     
     args = parser.parse_args()
     
     strain_list_file = args.strain_list
     bowtie_threads = args.threads
     sort_threads = args.sort_threads or max(1, bowtie_threads // 2)
+    results_dir = Path(args.results_dir).resolve()
     
-    # Auto-detect tool paths
+    # Auto-detect tool paths using ToolManager
     print("Detecting tools...")
+    tool_manager = ToolManager()
+    
+    if not tool_manager.validate_all():
+        sys.exit(1)
+    
+    # Get tool paths
     tools = {
-        'sickle': find_tool('sickle'),
-        'bowtie2': find_tool('bowtie2'),
-        'samtools': find_tool('samtools'),
-        'java': find_tool('java'),
+        'sickle': str(tool_manager.get_path('sickle')),
+        'bowtie2': str(tool_manager.get_path('bowtie2')),
+        'samtools': str(tool_manager.get_path('samtools')),
+        'java': str(tool_manager.get_path('java')),
     }
     
     # Find scripts and data files
+    project_root = Path(__file__).parent.parent.parent
+    data_dir = project_root / "data"
+
     varscan_jar = find_script("VarScan.v2.3.9.jar")
     ppe_list = find_data_file("PPE_INS_loci_Rv.list")
-    ref_fasta = find_data_file("tb_h37rv.fasta")
-    ref_fai = find_data_file("tb_h37rv.fasta.fai")
-    
+    profile = REFERENCE_PROFILES[args.reference_profile]
+
+    if args.reference_fasta:
+        ref_fasta = str(Path(args.reference_fasta).resolve())
+    else:
+        ref_fasta = find_data_file(profile["fasta"])
+
+    if args.reference_fai:
+        ref_fai = str(Path(args.reference_fai).resolve())
+    else:
+        default_fai = data_dir / profile["fai"]
+        ref_fai = str(default_fai if default_fai.exists() else Path(f"{ref_fasta}.fai"))
+
+    if args.bowtie2_index:
+        bowtie2_index_prefix = Path(args.bowtie2_index).resolve()
+    else:
+        bowtie2_index_prefix = data_dir / "bowtie2_index" / profile["bowtie2_index_prefix"]
+
+    genome_length = args.genome_length if args.genome_length else int(profile["genome_length"])
+
+    if not Path(ref_fasta).exists():
+        print(f"Error: reference FASTA not found: {ref_fasta}")
+        sys.exit(1)
+
     print(f"Found sickle: {tools['sickle']}")
     print(f"Found bowtie2: {tools['bowtie2']}")
     print(f"Found samtools: {tools['samtools']}")
     print(f"Found java: {tools['java']}")
     print(f"Found VarScan: {varscan_jar}")
+    print(f"Reference profile: {args.reference_profile}")
     print(f"Found reference: {ref_fasta}")
+    print(f"Found/expected FAI: {ref_fai}")
     print()
-    
+
+    if not Path(ref_fai).exists():
+        print(f"FAI not found, generating: {ref_fai}")
+        try:
+            subprocess.run([tools["samtools"], "faidx", ref_fasta], check=True)
+        except subprocess.CalledProcessError as e:
+            print(f"Error generating FAI: {e}")
+            sys.exit(1)
+        generated_fai = Path(f"{ref_fasta}.fai")
+        if generated_fai.exists():
+            ref_fai = str(generated_fai)
+
     # Check and create bowtie2 index if needed
-    bowtie2_index = check_bowtie2_index(ref_fasta, tools['bowtie2'])
+    bowtie2_index = check_bowtie2_index(ref_fasta, tools['bowtie2'], bowtie2_index_prefix)
     print(f"Found bowtie2 index: {bowtie2_index}")
     print()
     
-    # Read strain list
+    # Read samples input
     try:
-        with open(strain_list_file) as f:
-            strains = [line.strip() for line in f if line.strip()]
+        samples = parse_samples_input(strain_list_file)
     except FileNotFoundError:
         print(f"Error: {strain_list_file} not found")
         sys.exit(1)
-    
-    print(f"Processing {len(strains)} strains...")
-    print()
-    
-    # Check if results/ directory exists
-    results_dir = Path("results")
-    if not results_dir.exists():
-        print("Error: results/ directory not found")
-        print("Please create it first: mkdir results")
+    except Exception as e:
+        print(f"Error parsing sample input {strain_list_file}: {e}")
         sys.exit(1)
     
+    print(f"Processing {len(samples)} strains...")
+    print()
+    
+    # Check if results directory exists
+    if not results_dir.exists():
+        print(f"Error: results directory not found: {results_dir}")
+        print("Please create it first")
+        sys.exit(1)
+
     # Generate pipeline script
-    output_file = results_dir / "pair_end.sh"
+    output_file = Path(args.script_path).resolve() if args.script_path else results_dir / "pair_end.sh"
+    output_file.parent.mkdir(parents=True, exist_ok=True)
+    logs_dir = results_dir / "logs"
+    sample_logs_dir = logs_dir / "samples"
+    logs_dir.mkdir(parents=True, exist_ok=True)
+    sample_logs_dir.mkdir(parents=True, exist_ok=True)
     
     # Check if file already exists
     if output_file.exists():
@@ -218,72 +376,83 @@ Examples:
         # Write header
         out.write("#!/bin/bash\n")
         out.write("set -e\n\n")
+        out.write(f'RESULTS_DIR={shlex.quote(str(results_dir))}\n')
+        out.write('LOGS_DIR="$RESULTS_DIR/logs"\n')
+        out.write('mkdir -p "$LOGS_DIR" "$LOGS_DIR/samples"\n\n')
         out.write("echo 'Starting SNP calling pipeline...'\n")
-        out.write(f"echo 'Processing {len(strains)} strains'\n\n")
+        out.write(f"echo 'Processing {len(samples)} strains'\n\n")
         
-        for i, strain in enumerate(strains, 1):
-            # Extract basename from full path
-            strain_name = os.path.basename(strain)
+        for i, sample in enumerate(samples, 1):
+            strain_name = sample["sample_id"]
+            r1 = sample["r1"]
+            r2 = sample["r2"]
             
-            out.write(f"echo '[{i}/{len(strains)}] Processing {strain}...'\n")
-            
+            out.write(f'SAMPLE_LOG="$LOGS_DIR/samples/{strain_name}.step2.log"\n')
+            out.write(f"echo '[{i}/{len(samples)}] Processing {strain_name}...'\n")
+            out.write(f'echo \'[{i}/{len(samples)}] Processing {strain_name}...\' > "$SAMPLE_LOG"\n')
+            out.write("{\n")
+
             # Step 1: Quality trimming with sickle
-            # Input uses full path, output goes to results/
-            step1 = f"{tools['sickle']} pe -t sanger -f {strain}_1.fastq.gz -r {strain}_2.fastq.gz -o results/{strain_name}_1.fastq -p results/{strain_name}_2.fastq -s results/{strain_name}_s.fastq\n"
+            # Input uses explicit R1/R2 paths from samples input
+            step1 = (
+                f"{tools['sickle']} pe -t sanger "
+                f"-f {shlex.quote(r1)} -r {shlex.quote(r2)} "
+                f'-o "$RESULTS_DIR/{strain_name}_1.fastq" -p "$RESULTS_DIR/{strain_name}_2.fastq" '
+                f'-s "$RESULTS_DIR/{strain_name}_s.fastq"\n'
+            )
             out.write(step1)
             
             # Step 2: Alignment with bowtie2 (multi-threaded)
-            step2 = f"{tools['bowtie2']} -p {bowtie_threads} -x {bowtie2_index} -1 results/{strain_name}_1.fastq -2 results/{strain_name}_2.fastq -U results/{strain_name}_s.fastq -S results/{strain_name}.sam\n"
+            step2 = f'{tools["bowtie2"]} -p {bowtie_threads} -x {bowtie2_index} -1 "$RESULTS_DIR/{strain_name}_1.fastq" -2 "$RESULTS_DIR/{strain_name}_2.fastq" -U "$RESULTS_DIR/{strain_name}_s.fastq" -S "$RESULTS_DIR/{strain_name}.sam"\n'
             out.write(step2)
 
             # Step 3: Convert SAM to BAM
-            step3 = f"{tools['samtools']} view -bhSt {ref_fai} results/{strain_name}.sam -o results/{strain_name}.paired.bam\n"
+            step3 = f'{tools["samtools"]} view -bhSt {shlex.quote(ref_fai)} "$RESULTS_DIR/{strain_name}.sam" -o "$RESULTS_DIR/{strain_name}.paired.bam"\n'
             out.write(step3)
 
             # Step 4: Sort BAM (multi-threaded)
-            step4 = f"{tools['samtools']} sort -@ {sort_threads} results/{strain_name}.paired.bam -o results/{strain_name}.sort.bam\n"
+            step4 = f'{tools["samtools"]} sort -@ {sort_threads} "$RESULTS_DIR/{strain_name}.paired.bam" -o "$RESULTS_DIR/{strain_name}.sort.bam"\n'
             out.write(step4)
             
             # Step 5: Calculate depth and call variants
-            step5 = f"""depth=$({tools['samtools']} depth results/{strain_name}.sort.bam | awk '{{s+=$3}}END{{print s/NR}}')
-coverage=$({tools['samtools']} depth results/{strain_name}.sort.bam | awk 'END{{print NR/4411532}}')
+            step5 = f"""depth=$({tools['samtools']} depth $RESULTS_DIR/{strain_name}.sort.bam | awk '{{s+=$3}}END{{print s/NR}}')
+coverage=$({tools['samtools']} depth $RESULTS_DIR/{strain_name}.sort.bam | awk 'END{{print NR/{genome_length}}}')
 a=$(($(echo $depth | awk '{{printf ("%.f",$1)}}')))
 if [ "$a" -ge 10 ] && (echo ${{coverage}} 0.95 | awk '!($1>=$2){{exit 1}}'); then
-	{tools['samtools']} mpileup -q 30 -Q 30 -Bf {ref_fasta} results/{strain_name}.sort.bam > results/{strain_name}.pileup
+	{tools['samtools']} mpileup -q 30 -Q 30 -Bf {ref_fasta} $RESULTS_DIR/{strain_name}.sort.bam > $RESULTS_DIR/{strain_name}.pileup
 	b=$(($(echo $depth | awk '{{printf ("%.f",$1)}}')/10))
 	if [ $b -lt 5 ]; then
-		{tools['java']} -jar {varscan_jar} mpileup2snp results/{strain_name}.pileup --min-coverage 5 --min-reads2 2 --min-avg-qual 30 --min-var-freq 0.75 --p-value 99e-02 > results/{strain_name}.varscan
+		{tools['java']} -jar {varscan_jar} mpileup2snp $RESULTS_DIR/{strain_name}.pileup --min-coverage 5 --min-reads2 2 --min-avg-qual 30 --min-var-freq 0.75 --p-value 99e-02 > $RESULTS_DIR/{strain_name}.varscan
 	else
-		{tools['java']} -jar {varscan_jar} mpileup2snp results/{strain_name}.pileup --min-coverage $b --min-reads2 2 --min-avg-qual 30 --min-var-freq 0.75 --p-value 99e-02 > results/{strain_name}.varscan
+		{tools['java']} -jar {varscan_jar} mpileup2snp $RESULTS_DIR/{strain_name}.pileup --min-coverage $b --min-reads2 2 --min-avg-qual 30 --min-var-freq 0.75 --p-value 99e-02 > $RESULTS_DIR/{strain_name}.varscan
 	fi
-	{tools['java']} -jar {varscan_jar} mpileup2cns results/{strain_name}.pileup --min-coverage 3 --min-avg-qual 20 --min-var-freq 0.75 --strand-filter 0 --min-reads2 2 > results/{strain_name}.cns
-	awk -F '[:]' '{{if($9==0 || $10==0)$0="";else print $0}}' results/{strain_name}.varscan > results/{strain_name}.vars
-	mtb-evo ppe-filter --ppe-list {ppe_list} --input results/{strain_name}.vars --output results/{strain_name}.var.ppe
-	mtb-evo format-trans --input results/{strain_name}.var.ppe --output results/{strain_name}.var.for
-	cut -f2,3,4 results/{strain_name}.var.for > results/{strain_name}.snp
-	rm -f results/{strain_name}.sam results/{strain_name}.varscan results/{strain_name}.paired.bam results/{strain_name}_s.fastq results/{strain_name}_1.fastq results/{strain_name}_2.fastq results/{strain_name}.var.for results/{strain_name}.var.ppe results/{strain_name}.pileup
-	echo '[{i}/{len(strains)}] {strain_name} completed successfully'
+	{tools['java']} -jar {varscan_jar} mpileup2cns $RESULTS_DIR/{strain_name}.pileup --min-coverage 3 --min-avg-qual 20 --min-var-freq 0.75 --strand-filter 0 --min-reads2 2 > $RESULTS_DIR/{strain_name}.cns
+	awk -F '[:]' '{{if($9==0 || $10==0)$0="";else print $0}}' $RESULTS_DIR/{strain_name}.varscan > $RESULTS_DIR/{strain_name}.vars
+	mtb-evo ppe-filter --ppe-list {ppe_list} --input $RESULTS_DIR/{strain_name}.vars --output $RESULTS_DIR/{strain_name}.var.ppe
+	mtb-evo format-trans --input $RESULTS_DIR/{strain_name}.var.ppe --output $RESULTS_DIR/{strain_name}.var.for
+	cut -f2,3,4 $RESULTS_DIR/{strain_name}.var.for > $RESULTS_DIR/{strain_name}.snp
+	rm -f $RESULTS_DIR/{strain_name}.sam $RESULTS_DIR/{strain_name}.varscan $RESULTS_DIR/{strain_name}.paired.bam $RESULTS_DIR/{strain_name}_s.fastq $RESULTS_DIR/{strain_name}_1.fastq $RESULTS_DIR/{strain_name}_2.fastq $RESULTS_DIR/{strain_name}.var.for $RESULTS_DIR/{strain_name}.var.ppe $RESULTS_DIR/{strain_name}.pileup
+	echo '[{i}/{len(samples)}] {strain_name} completed successfully'
 else
-	echo "{strain_name} do not meet criteria: ${{depth}} ${{coverage}}" >> results/discard
-	rm -f results/{strain_name}.sam results/{strain_name}.varscan results/{strain_name}.paired.bam results/{strain_name}_s.fastq results/{strain_name}_1.fastq results/{strain_name}_2.fastq results/{strain_name}.var.for results/{strain_name}.var.ppe results/{strain_name}.pileup
-	echo '[{i}/{len(strains)}] {strain_name} discarded (low coverage)'
+	echo "{strain_name} do not meet criteria: ${{depth}} ${{coverage}}" >> $LOGS_DIR/discard.txt
+	rm -f $RESULTS_DIR/{strain_name}.sam $RESULTS_DIR/{strain_name}.varscan $RESULTS_DIR/{strain_name}.paired.bam $RESULTS_DIR/{strain_name}_s.fastq $RESULTS_DIR/{strain_name}_1.fastq $RESULTS_DIR/{strain_name}_2.fastq $RESULTS_DIR/{strain_name}.var.for $RESULTS_DIR/{strain_name}.var.ppe $RESULTS_DIR/{strain_name}.pileup
+	echo '[{i}/{len(samples)}] {strain_name} discarded (low coverage)'
 fi
 """
             out.write(step5)
+            out.write('} >> "$SAMPLE_LOG" 2>&1\n')
+            out.write('tail -n 1 "$SAMPLE_LOG" || true\n')
             out.write("\n")
         
         out.write("echo 'All strains processed!'\n")
     
-    print(f"Generated {output_file}")
-    print(f"  Strains: {len(strains)}")
+    print(f"Generated workflow script: {output_file}")
+    print(f"  Strains: {len(samples)}")
     print(f"  Bowtie2 threads: {bowtie_threads}")
     print(f"  Samtools sort threads: {sort_threads}")
     print()
     print("To run the pipeline:")
-    print("  cd results && bash pair_end.sh")
-    print()
-    print("Or run in background:")
-    print("  cd results && nohup bash pair_end.sh > pair_end.log 2>&1 &")
+    print(f"  bash {output_file}")
 
 
 if __name__ == "__main__":

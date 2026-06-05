@@ -5,6 +5,11 @@ from pathlib import Path
 import typer
 from typer import Option
 
+from src.utils.logging_config import get_logger
+
+
+logger = get_logger("commands.wild_extract")
+
 
 def extract_wild_loci(loci_file: Path, ancestor_fasta: Path, output: Path) -> None:
     """
@@ -17,6 +22,7 @@ def extract_wild_loci(loci_file: Path, ancestor_fasta: Path, output: Path) -> No
     4. Output coordinate and base
     """
     # Read loci list
+    logger.info("Extracting wild loci from %s using ancestor %s into %s", loci_file, ancestor_fasta, output)
     loci = []
     with open(loci_file) as f:
         for line in f:
@@ -24,6 +30,7 @@ def extract_wild_loci(loci_file: Path, ancestor_fasta: Path, output: Path) -> No
             if line:
                 loci.append(int(line))
 
+    logger.info("Read %d loci from %s", len(loci), loci_file)
     typer.echo(f"Read {len(loci)} loci from {loci_file}")
 
     # Read ancestor sequence
@@ -35,6 +42,7 @@ def extract_wild_loci(loci_file: Path, ancestor_fasta: Path, output: Path) -> No
                 continue  # Skip FASTA header
             seq += line
 
+    logger.info("Read ancestor sequence length=%d bp", len(seq))
     typer.echo(f"Read ancestor sequence: {len(seq)} bp")
 
     # Extract bases (1-based coordinates)
@@ -48,6 +56,7 @@ def extract_wild_loci(loci_file: Path, ancestor_fasta: Path, output: Path) -> No
             else:
                 f.write(f"{pos}\tN\n")  # Out of range
 
+    logger.info("Extracted %d bases, out_of_range=%d", extracted, len(loci) - extracted)
     typer.echo(f"Extracted {extracted} bases (out of range: {len(loci) - extracted})")
 
 
@@ -58,4 +67,5 @@ def wild_extract_cmd(
 ) -> None:
     """Extract wild-type bases from ancestor sequence."""
     extract_wild_loci(loci, ancestor, output)
+    logger.info("Wild-type bases extracted: %s", output)
     typer.echo(f"Wild-type bases extracted: {output}")

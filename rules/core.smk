@@ -1,0 +1,373 @@
+rule core_trim_reads:
+    input:
+        r1=lambda wc: sample_r1(wc.sample),
+        r2=lambda wc: sample_r2(wc.sample),
+    output:
+        r1_trim=temp(result_path("samples", "{sample}", "alignment_qc", "{sample}_1.fastq")),
+        r2_trim=temp(result_path("samples", "{sample}", "alignment_qc", "{sample}_2.fastq")),
+        s_trim=temp(result_path("samples", "{sample}", "alignment_qc", "{sample}_s.fastq")),
+    log:
+        result_path("logs", "rules", "core_trim_reads", "{sample}.log"),
+    shell:
+        r'''
+        set -euo pipefail
+        mkdir -p "$(dirname {log})" "$(dirname {output.r1_trim})"
+        sickle pe -t sanger \
+            -f "{input.r1}" \
+            -r "{input.r2}" \
+            -o "{output.r1_trim}" \
+            -p "{output.r2_trim}" \
+            -s "{output.s_trim}" \
+            > {log} 2>&1
+        '''
+
+
+rule core_align_and_sort:
+    input:
+        r1_trim=rules.core_trim_reads.output.r1_trim,
+        r2_trim=rules.core_trim_reads.output.r2_trim,
+        s_trim=rules.core_trim_reads.output.s_trim,
+    output:
+        bam=result_path("samples", "{sample}", "alignment_qc", "{sample}.sort.bam"),
+    log:
+        result_path("logs", "rules", "core_align_and_sort", "{sample}.log"),
+    params:
+        index_prefix=BOWTIE2_INDEX_PREFIX,
+        ref_fasta=REFERENCE_FASTA,
+        ref_fai=REFERENCE_FASTA_FAI,
+        bowtie_threads=BOWTIE2_THREADS,
+        sort_threads=SAMTOOLS_SORT_THREADS,
+    shell:
+        r'''
+        set -euo pipefail
+        mkdir -p "$(dirname {log})" "$(dirname {output.bam})"
+        sam_tmp="{output.bam}.tmp.sam"
+
+        missing_index=0
+        for suf in 1 2 3 4 rev.1 rev.2; do
+            if [ ! -f "{params.index_prefix}.${{suf}}.bt2" ]; then
+                missing_index=1
+                break
+            fi
+        done
+        if [ "$missing_index" -eq 1 ]; then
+            echo "Bowtie2 index missing for {params.index_prefix}, building now..." >> {log}
+            mkdir -p "$(dirname "{params.index_prefix}")"
+            if ! command -v bowtie2-build >/dev/null 2>&1; then
+                echo "Missing bowtie2-build in PATH" >> {log}
+                exit 1
+            fi
+            bowtie2-build "{params.ref_fasta}" "{params.index_prefix}" >> {log} 2>&1
+        fi
+
+        if [ ! -f "{params.ref_fai}" ]; then
+            samtools faidx "{params.ref_fasta}" >> {log} 2>&1
+        fi
+
+        bowtie2 -p {params.bowtie_threads} \
+            -x {params.index_prefix} \
+            -1 "{input.r1_trim}" \
+            -2 "{input.r2_trim}" \
+            -U "{input.s_trim}" \
+            -S "$sam_tmp" \
+            >> {log} 2>&1
+
+        samtools view -bh -T "{params.ref_fasta}" "$sam_tmp" 2>> {log} \
+        | samtools sort -@ {params.sort_threads} -o "{output.bam}" - 2>> {log}
+
+        samtools flagstat "{output.bam}" >> {log} 2>&1
+        rm -f "$sam_tmp"
+        '''
+
+
+rule core_depth_metrics:
+    input:
+        bam=rules.core_align_and_sort.output.bam,
+    output:
+        depth=result_path("samples", "{sample}", "report_inputs", "alignment_qc", "{sample}.depth"),
+        status=result_path("samples", "{sample}", "alignment_qc", "core_gate_status.tsv"),
+    log:
+        result_path("logs", "rules", "core_depth_metrics", "{sample}.log"),
+    params:
+        genome_length=GENOME_LENGTH,
+    shell:
+        r'''
+        set -euo pipefail
+        mkdir -p "$(dirname {log})" "$(dirname {output.depth})" "$(dirname {output.status})"
+
+        samtools depth "{input.bam}" > "{output.depth}" 2>> {log}
+
+        mean_depth=$(awk '{{sum+=$3; n+=1}} END {{if (n>0) printf "%.6f", sum/n; else printf "0"}}' "{output.depth}")
+        coverage_fraction=$(awk -v g={params.genome_length} 'END {{if (g>0) printf "%.6f", NR/g; else printf "0"}}' "{output.depth}")
+        mean_round=$(printf '%.0f' "$mean_depth")
+
+        passed=0
+        if [ "$mean_round" -ge 10 ] && awk -v c="$coverage_fraction" 'BEGIN {{exit (c>=0.95)?0:1}}'; then
+            passed=1
+            msg="PASS"
+        else
+            msg="LOW_COVERAGE_OR_DEPTH"
+        fi
+
+        printf 'sample_id\tmean_depth\tcoverage_fraction\tpassed_core_gate\tmessage\n' > "{output.status}"
+        printf '{wildcards.sample}\t%s\t%s\t%s\t%s\n' "$mean_depth" "$coverage_fraction" "$passed" "$msg" >> "{output.status}"
+        '''
+
+
+rule core_call_variants:
+    input:
+        bam=rules.core_align_and_sort.output.bam,
+        depth=rules.core_depth_metrics.output.depth,
+        status=rules.core_depth_metrics.output.status,
+    output:
+        done=result_path("logs", "rules", "core_call_variants", "{sample}.done"),
+    log:
+        result_path("logs", "rules", "core_call_variants", "{sample}.log"),
+    params:
+        sample_dir=result_path("samples", "{sample}"),
+        sample_id="{sample}",
+        ref_fasta=REFERENCE_FASTA,
+        varscan_jar=VARSCAN_JAR,
+        ppe_list=PPE_LIST,
+        python_bin=PYTHON_BIN,
+        cli_module=CLI_MODULE,
+        discard_log=result_path("logs", "discard.txt"),
+    shell:
+        r'''
+        set -euo pipefail
+        mkdir -p "$(dirname {log})" "$(dirname {output.done})" "$(dirname {params.discard_log})" "{params.sample_dir}/variant_analysis"
+
+        sample_id={params.sample_id}
+        variant_dir="{params.sample_dir}/variant_analysis"
+        pileup="$variant_dir/${{sample_id}}.pileup"
+        varscan="$variant_dir/${{sample_id}}.varscan"
+        cns="$variant_dir/${{sample_id}}.cns"
+        vars="$variant_dir/${{sample_id}}.vars"
+        var_ppe="$variant_dir/${{sample_id}}.var.ppe"
+        var_for="$variant_dir/${{sample_id}}.var.for"
+        snp="$variant_dir/${{sample_id}}.snp"
+
+        passed=$(tail -n 1 "{input.status}" | cut -f4)
+        mean_depth=$(tail -n 1 "{input.status}" | cut -f2)
+        coverage_fraction=$(tail -n 1 "{input.status}" | cut -f3)
+
+        if [ "$passed" = "1" ]; then
+            min_cov=$(printf '%.0f' "$mean_depth")
+            min_cov=$(( min_cov / 10 ))
+            if [ "$min_cov" -lt 5 ]; then
+                min_cov=5
+            fi
+
+            samtools mpileup -q 30 -Q 30 -Bf "{params.ref_fasta}" "{input.bam}" > "$pileup" 2>> {log}
+            java -jar "{params.varscan_jar}" mpileup2snp "$pileup" \
+                --min-coverage "$min_cov" \
+                --min-reads2 2 --min-avg-qual 30 --min-var-freq 0.75 --p-value 99e-02 \
+                > "$varscan" 2>> {log}
+            java -jar "{params.varscan_jar}" mpileup2cns "$pileup" \
+                --min-coverage 3 --min-avg-qual 20 --min-var-freq 0.75 --strand-filter 0 --min-reads2 2 \
+                > "$cns" 2>> {log}
+
+            awk -F '[:]' '{{if($9==0 || $10==0)$0="";else print $0}}' "$varscan" > "$vars"
+            {params.python_bin} -m {params.cli_module} ppe-filter --ppe-list "{params.ppe_list}" --input "$vars" --output "$var_ppe" >> {log} 2>&1
+            {params.python_bin} -m {params.cli_module} format-trans --input "$var_ppe" --output "$var_for" >> {log} 2>&1
+            cut -f2,3,4 "$var_for" > "$snp"
+
+            rm -f "$pileup" "$varscan" "$var_ppe" "$var_for"
+            echo "${{sample_id}} completed successfully" >> {log}
+        else
+            echo "${{sample_id}} do not meet criteria: ${{mean_depth}} ${{coverage_fraction}}" >> {params.discard_log}
+            rm -f "$pileup" "$varscan" "$cns" "$vars" "$var_ppe" "$var_for" "$snp"
+            echo "${{sample_id}} discarded (low coverage)" >> {log}
+        fi
+
+        touch {output.done}
+        '''
+
+
+rule core_step3_diff_loci:
+    input:
+        expand(result_path("logs", "rules", "core_call_variants", "{sample}.done"), sample=SAMPLES),
+    output:
+        diff_loci=result_path(".core_work", "diff_loci.txt"),
+    log:
+        result_path("logs", "rules", "core_step3_diff_loci.log"),
+    params:
+        python_bin=PYTHON_BIN,
+        cli_module=CLI_MODULE,
+        samples_dir=result_path("samples"),
+    shell:
+        r'''
+        set -euo pipefail
+        mkdir -p "$(dirname {log})" "$(dirname {output.diff_loci})"
+        {params.python_bin} -m {params.cli_module} diff-loci --snp-dir {params.samples_dir} --output {output.diff_loci} > {log} 2>&1
+        '''
+
+
+rule core_step4_recall:
+    input:
+        diff_loci=rules.core_step3_diff_loci.output.diff_loci,
+        call_done=rules.core_call_variants.output.done,
+    output:
+        done=result_path("logs", "rules", "core_step4_recall", "{sample}.done"),
+    log:
+        result_path("logs", "rules", "core_step4_recall", "{sample}.log"),
+    params:
+        python_bin=PYTHON_BIN,
+        cli_module=CLI_MODULE,
+        sample_id="{sample}",
+        sample_dir=result_path("samples", "{sample}", "variant_analysis"),
+    shell:
+        r'''
+        set -euo pipefail
+        mkdir -p "$(dirname {log})" "$(dirname {output.done})" "{params.sample_dir}"
+        cns="{params.sample_dir}/{params.sample_id}.cns"
+        recall="{params.sample_dir}/{params.sample_id}.recall.fasta"
+
+        if [ -s "$cns" ]; then
+            {params.python_bin} -m {params.cli_module} recall \
+                --loci {input.diff_loci} \
+                --cns "$cns" \
+                --output "$recall" \
+                > {log} 2>&1
+        else
+            rm -f "$recall"
+            echo "skip recall: missing cns for {wildcards.sample}" > {log}
+        fi
+
+        touch {output.done}
+        '''
+
+
+rule core_step5_merge:
+    input:
+        expand(result_path("logs", "rules", "core_step4_recall", "{sample}.done"), sample=SAMPLES),
+    output:
+        merged=result_path(".core_work", "merged.fasta"),
+    log:
+        result_path("logs", "rules", "core_step5_merge.log"),
+    params:
+        python_bin=PYTHON_BIN,
+        cli_module=CLI_MODULE,
+        samples_dir=result_path("samples"),
+    shell:
+        r'''
+        set -euo pipefail
+        mkdir -p "$(dirname {log})" "$(dirname {output.merged})"
+        {params.python_bin} -m {params.cli_module} merge --fas-dir {params.samples_dir} --output {output.merged} > {log} 2>&1
+        '''
+
+
+rule core_step6_wild_extract:
+    input:
+        diff_loci=rules.core_step3_diff_loci.output.diff_loci,
+    output:
+        wildtype=result_path(".core_work", "wildtype.fasta"),
+    log:
+        result_path("logs", "rules", "core_step6_wild_extract.log"),
+    params:
+        python_bin=PYTHON_BIN,
+        cli_module=CLI_MODULE,
+        ancestor=ANCESTOR_FASTA,
+    shell:
+        r'''
+        set -euo pipefail
+        mkdir -p "$(dirname {log})" "$(dirname {output.wildtype})"
+        {params.python_bin} -m {params.cli_module} wild-extract \
+            --loci {input.diff_loci} \
+            --ancestor {params.ancestor} \
+            --output {output.wildtype} \
+            > {log} 2>&1
+        '''
+
+
+rule core_step7_filter:
+    input:
+        wild_loci=rules.core_step6_wild_extract.output.wildtype,
+        merged=rules.core_step5_merge.output.merged,
+    output:
+        core_fa=result_path(".core_work", "core_snps.fadel-InvMisF5.bak.fa"),
+        core_loc=result_path(".core_work", "core_snps.fadel-InvMisF5.bak.loc"),
+    log:
+        result_path("logs", "rules", "core_step7_filter.log"),
+    params:
+        python_bin=PYTHON_BIN,
+        cli_module=CLI_MODULE,
+        output_prefix=result_path(".core_work", "core_snps"),
+    shell:
+        r'''
+        set -euo pipefail
+        mkdir -p "$(dirname {log})" "$(dirname {output.core_fa})"
+        {params.python_bin} -m {params.cli_module} filter \
+            --wild-loci {input.wild_loci} \
+            --alignment {input.merged} \
+            --threshold 5 \
+            --output-prefix {params.output_prefix} \
+            > {log} 2>&1
+        '''
+
+
+rule core_step8_distance:
+    input:
+        core_fa=rules.core_step7_filter.output.core_fa,
+    output:
+        distance=result_path(".core_work", "distance_matrix.txt"),
+    log:
+        result_path("logs", "rules", "core_step8_distance.log"),
+    params:
+        python_bin=PYTHON_BIN,
+        cli_module=CLI_MODULE,
+    shell:
+        r'''
+        set -euo pipefail
+        mkdir -p "$(dirname {log})" "$(dirname {output.distance})"
+        {params.python_bin} -m {params.cli_module} distance --alignment {input.core_fa} --output {output.distance} > {log} 2>&1
+        '''
+
+
+rule core_publish_outputs:
+    input:
+        diff_loci=rules.core_step3_diff_loci.output.diff_loci,
+        merged=rules.core_step5_merge.output.merged,
+        wildtype=rules.core_step6_wild_extract.output.wildtype,
+        core_fa=rules.core_step7_filter.output.core_fa,
+        core_loc=rules.core_step7_filter.output.core_loc,
+        distance=rules.core_step8_distance.output.distance,
+    output:
+        publish_done=result_path("logs", "workflow", "core_publish.done"),
+        core_outputs=CORE_OUTPUTS,
+    log:
+        result_path("logs", "rules", "core_publish_outputs.log"),
+    params:
+        results_dir=RESULTS_DIR,
+    shell:
+        r'''
+        set -euo pipefail
+        core_dir="{params.results_dir}/core"
+        mkdir -p "$(dirname {log})" "$(dirname {output.publish_done})" "$core_dir"
+
+        cp {input.diff_loci} "$core_dir/diff_loci.txt"
+        cp {input.merged} "$core_dir/merged.fasta"
+        cp {input.wildtype} "$core_dir/wildtype.fasta"
+        cp {input.core_fa} "$core_dir/core_snps.fadel-InvMisF5.bak.fa"
+        cp {input.core_loc} "$core_dir/core_snps.fadel-InvMisF5.bak.loc"
+        cp {input.distance} "$core_dir/distance_matrix.txt"
+
+        echo "published shared core outputs to $core_dir" > {log}
+        touch {output.publish_done}
+        '''
+
+
+rule run_core:
+    input:
+        publish_done=rules.core_publish_outputs.output.publish_done,
+    output:
+        done=result_path("logs", "workflow", "run_core.done"),
+    log:
+        result_path("logs", "rules", "run_core.log"),
+    shell:
+        r'''
+        set -euo pipefail
+        mkdir -p "$(dirname {log})" "$(dirname {output.done})"
+        echo "core sample-level pipeline completed" > {log}
+        touch {output.done}
+        '''

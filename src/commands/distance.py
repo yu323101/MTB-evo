@@ -5,6 +5,11 @@ from pathlib import Path
 import typer
 from typer import Option
 
+from src.utils.logging_config import get_logger
+
+
+logger = get_logger("commands.distance")
+
 
 def calculate_distance(
     alignment_file: Path,
@@ -20,6 +25,7 @@ def calculate_distance(
     4. Output distance matrix
     """
     # Step 1: Parse FASTA alignment
+    logger.info("Calculating pairwise distance from %s to %s", alignment_file, output)
     sequences = {}
     names = []
 
@@ -69,4 +75,5 @@ def distance_cmd(
 ) -> None:
     """Calculate pairwise SNP distances."""
     calculate_distance(alignment, output)
+    logger.info("Distance calculation completed: %s", output)
     typer.echo(f"Distance calculation completed: {output}")
