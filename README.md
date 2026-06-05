@@ -12,8 +12,8 @@ snakemake --snakefile Snakefile --configfile config/config.yaml -j 4 all
 
 可选 target：
 
-- `all`：全流程（Layer B1 + B2 + C + D）
-- `core_only`：基础层（B1 + B2）
+- `all`：全流程（Layer A + B + C + D）
+- `core_only`：基础层（A + B）
 - `downstream_only`：仅桥接输入（Layer C）
 - `reports_only`：仅报告层（Layer D）
 
@@ -37,8 +37,8 @@ snakemake --snakefile Snakefile --configfile config/config.yaml -n all --config 
 
 ## 3. 分层设计（简版）
 
-- Layer B1：FASTQ 派生基础输入（`fastp_qc` JSON）
-- Layer B2：样本主分析（BAM / CNS / SNP / vars）+ 共享 `core`
+- Layer A：FASTQ 派生基础输入（`fastp_qc` JSON）
+- Layer B：样本主分析（BAM / CNS / SNP / vars）+ 共享 `core`
 - Layer C：下游桥接输入（`depth` / `insert_sizes` / `*_annotated.txt`）
 - Layer D：最终报告（`figure/`、`table/`、`lineage_summary`）
 
