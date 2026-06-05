@@ -29,6 +29,12 @@ MD001.cleaned,/path/MD001.cleaned_1.fastq.gz,/path/MD001.cleaned_2.fastq.gz
 MD002.cleaned,/path/MD002.cleaned_1.fastq.gz,/path/MD002.cleaned_2.fastq.gz
 ```
 
+运行前请先改写 `config/samplesheet.csv`，或在命令行覆盖 `samplesheet`：
+
+```bash
+snakemake --snakefile Snakefile --configfile config/config.yaml -n all --config samplesheet=/abs/path/to/samplesheet.csv
+```
+
 ## 3. 分层设计（简版）
 
 - Layer B1：FASTQ 派生基础输入（`fastp_qc` JSON）
@@ -54,7 +60,7 @@ results/
 │       ├── report_inputs/
 │       │   ├── fastp_qc/
 │       │   ├── alignment_qc/
-│       │   └── variant_analysis/
+│       │   └── annotated_variants/
 │       ├── figure/
 │       └── table/
 └── logs/
@@ -145,6 +151,12 @@ dry-run：
 
 ```bash
 snakemake --snakefile Snakefile --configfile config/config.yaml -n all
+```
+
+或显式覆盖样本表：
+
+```bash
+snakemake --snakefile Snakefile --configfile config/config.yaml -n all --config samplesheet=/abs/path/to/samplesheet.csv
 ```
 
 ## 9. 当前边界与后续

@@ -14,6 +14,7 @@ from typing import Dict, List, Optional
 import typer
 from typer import Option
 
+from src.core.report_inputs import annotated_variant_candidates
 from src.reporting.variant_classification import (
     summarize_variant_classes,
     write_normalized_annotated_from_cns,
@@ -84,6 +85,16 @@ def _global_logs_dir(input_root: Path, output_root: Path) -> Path:
     return output_root / "logs"
 
 
+def _lineage_summary_candidates(input_root: Path, run_id: str) -> List[Path]:
+    results_root = input_root.parent if input_root.name == "samples" else input_root
+    candidates: List[Path] = []
+    if run_id:
+        candidates.append(results_root / "logs" / "runs" / run_id / "lineage_summary.tsv")
+    candidates.append(results_root / "logs" / "lineage_summary.tsv")
+    candidates.append(results_root / "logs" / "runs" / "latest" / "lineage_summary.tsv")
+    return candidates
+
+
 
 def _resolve_legacy_base(user_base: Optional[Path] = None) -> Path:
     candidates: List[Path] = []
@@ -139,11 +150,13 @@ def _build_clinical_variant_table_from_cns(cns_file: Path, annotated_file: Path,
         writer.writerows(rows)
 
 
-def _build_lineage_table(input_root: Path, sample_id: str, out_csv: Path) -> None:
-    summary_lineage = _find_first([
-        input_root / "logs" / "lineage_summary.tsv",
-        input_root.parent / "logs" / "lineage_summary.tsv" if input_root.name == "samples" else Path("__missing__"),
-    ])
+def _build_lineage_table(
+    input_root: Path,
+    sample_id: str,
+    out_csv: Path,
+    run_id: str = "",
+) -> Dict[str, str]:
+    summary_lineage = _find_first(_lineage_summary_candidates(input_root, run_id))
 
     record = {
         "sample_id": sample_id,
@@ -188,6 +201,7 @@ def _build_lineage_table(input_root: Path, sample_id: str, out_csv: Path) -> Non
         )
         writer.writerow(["状态", record.get("status", ""), "OK 表示判定成功"])
         writer.writerow(["备注", record.get("message", ""), "附加解释信息"])
+    return record
 
 
 def _patch_base_dir(src_script: Path, dst_script: Path, base_dir: Path) -> None:
@@ -457,9 +471,7 @@ def run_report_tables(
         cns = _find_first(
             [root / "variant_analysis" / f"{sample_id}.cns" for root in sample_roots]
         )
-        annotated = _find_first(
-            [root / "report_inputs" / "variant_analysis" / f"{sample_id}_annotated.txt" for root in sample_roots]
-        )
+        annotated = _find_first(annotated_variant_candidates(sample_roots, sample_id))
 
         logger.info("Table sample start: %s", sample_id)
         issues: List[str] = []
@@ -522,7 +534,9 @@ def run_report_tables(
 
         lineage_csv = table_dir / f"谱系鉴定结果_{sample_id}.csv"
         try:
-            _build_lineage_table(input_root, sample_id, lineage_csv)
+            lineage_record = _build_lineage_table(input_root, sample_id, lineage_csv, run_id=run_id)
+            if lineage_record.get("status") != "OK":
+                issues.append(f"LINEAGE_STATUS:{lineage_record.get('status', 'UNKNOWN')}")
         except Exception as e:
             issues.append(f"LINEAGE_TABLE_FAILED:{e}")
 

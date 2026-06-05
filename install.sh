@@ -12,9 +12,12 @@ echo ""
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 cd "$SCRIPT_DIR"
 
+# shellcheck disable=SC1091
+source "$SCRIPT_DIR/src/scripts/install_helpers.sh"
+
 # 检查conda
 echo "🔍 检查conda..."
-if ! command -v conda > /dev/null 2>&1; then
+if ! discover_conda; then
     echo "✗ 错误：未找到conda"
     echo "请先安装Anaconda或Miniconda:"
     echo "  https://docs.conda.io/en/latest/miniconda.html"

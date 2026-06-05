@@ -160,7 +160,7 @@ DOWNSTREAM_INPUTS = [
     result_path("samples", sample, "report_inputs", "alignment_qc", "insert_sizes.txt")
     for sample in SAMPLES
 ] + [
-    result_path("samples", sample, "report_inputs", "variant_analysis", f"{sample}_annotated.txt")
+    result_path("samples", sample, "report_inputs", "annotated_variants", f"{sample}_annotated.txt")
     for sample in SAMPLES
 ]
 

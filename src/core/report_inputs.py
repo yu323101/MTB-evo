@@ -13,6 +13,8 @@ from typing import Dict, Iterable, List
 
 PROJECT_ROOT = Path(__file__).resolve().parents[2]
 ANNOTATION_ASSET_DIR = PROJECT_ROOT / "data" / "report_assets" / "annotation"
+ANNOTATED_VARIANTS_DIRNAME = "annotated_variants"
+LEGACY_ANNOTATED_VARIANTS_DIRNAME = "variant_analysis"
 ANNOTATION_SCRIPT_CANDIDATES = []
 if os.environ.get("MTB_EVO_ANNOTATION_SCRIPT"):
     ANNOTATION_SCRIPT_CANDIDATES.append(Path(os.environ["MTB_EVO_ANNOTATION_SCRIPT"]))
@@ -61,6 +63,18 @@ def parse_samples_input(samples_file: Path) -> List[Dict[str, str]]:
                     }
                 )
     return rows
+
+
+def annotated_variant_candidates(sample_roots: List[Path], sample_id: str) -> List[Path]:
+    candidates: List[Path] = []
+    for root in sample_roots:
+        candidates.append(
+            root / "report_inputs" / ANNOTATED_VARIANTS_DIRNAME / f"{sample_id}_annotated.txt"
+        )
+        candidates.append(
+            root / "report_inputs" / LEGACY_ANNOTATED_VARIANTS_DIRNAME / f"{sample_id}_annotated.txt"
+        )
+    return candidates
 
 
 def write_fastp_json(fastq_path: Path, output_json: Path, output_html: Path) -> None:
@@ -224,7 +238,7 @@ def prepare_sample_foundation_outputs(sample_id: str, r1: Path, r2: Path, sample
 
 def prepare_sample_downstream_inputs_from_results(sample_id: str, sample_dir: Path, samtools: Path) -> None:
     downstream_align_dir = sample_dir / "report_inputs" / "alignment_qc"
-    downstream_variant_dir = sample_dir / "report_inputs" / "variant_analysis"
+    downstream_variant_dir = sample_dir / "report_inputs" / ANNOTATED_VARIANTS_DIRNAME
     alignment_dir = sample_dir / "alignment_qc"
     variant_dir = sample_dir / "variant_analysis"
 
@@ -256,4 +270,3 @@ def prepare_sample_downstream_inputs_from_results(sample_id: str, sample_dir: Pa
     )
 
     write_annotated_from_cns(cns_file, downstream_variant_dir / f"{sample_id}_annotated.txt")
-

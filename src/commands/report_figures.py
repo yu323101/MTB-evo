@@ -13,6 +13,7 @@ from typing import Dict, List, Optional
 import typer
 from typer import Option
 
+from src.core.report_inputs import annotated_variant_candidates
 from src.reporting.variant_classification import write_normalized_annotated_from_cns
 from src.utils.logging_config import get_logger
 
@@ -216,9 +217,7 @@ def run_report_figures(
         cns = _find_first(
             [root / "variant_analysis" / f"{sample_id}.cns" for root in sample_roots]
         )
-        annotated = _find_first(
-            [root / "report_inputs" / "variant_analysis" / f"{sample_id}_annotated.txt" for root in sample_roots]
-        )
+        annotated = _find_first(annotated_variant_candidates(sample_roots, sample_id))
 
         logger.info("Figure sample start: %s", sample_id)
         issues: List[str] = []
