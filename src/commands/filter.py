@@ -7,6 +7,11 @@ from typing import Dict, List, Set
 import typer
 from typer import Option
 
+from src.utils.logging_config import get_logger
+
+
+logger = get_logger("commands.filter")
+
 
 def filter_core_snp(
     wild_loci_file: Path,
@@ -26,6 +31,13 @@ def filter_core_snp(
     6. Output filtered alignment with H37Rv appended
     """
     # Step 1: Read wild-type bases
+    logger.info(
+        "Filtering core SNP alignment wild_loci=%s alignment=%s threshold=%s output_prefix=%s",
+        wild_loci_file,
+        alignment_file,
+        threshold,
+        output_prefix,
+    )
     wild_bases: Dict[int, str] = {}  # index -> base
     loci_coords: Dict[int, int] = {}  # index -> coordinate
 
@@ -42,6 +54,7 @@ def filter_core_snp(
                 loci_coords[idx] = coord
 
     num_loci = len(wild_bases)
+    logger.info("Read %d wild-type loci", num_loci)
     typer.echo(f"Read {num_loci} wild-type loci")
 
     # Step 2: Read sample sequences
@@ -55,7 +68,7 @@ def filter_core_snp(
         for line in f:
             line = line.strip()
             if line.startswith(">"):
-                if current_name and current_seq:
+                if current_name is not None:
                     sequences[current_name] = "".join(current_seq)
                 current_name = line
                 sample_names.append(current_name)
@@ -63,18 +76,22 @@ def filter_core_snp(
             elif line:
                 current_seq.append(line)
 
-        if current_name and current_seq:
+        if current_name is not None:
             sequences[current_name] = "".join(current_seq)
 
     num_samples = len(sample_names)
+    logger.info("Read %d sample sequences", num_samples)
     typer.echo(f"Read {num_samples} sample sequences")
 
     # Verify sequence lengths match
-    seq_lengths = set(len(seq) for seq in sequences.values())
-    if len(seq_lengths) != 1:
+    if not sample_names:
+        raise ValueError(f"No FASTA headers found in {alignment_file}")
+
+    seq_lengths = {len(sequences.get(name, "")) for name in sample_names}
+    if len(seq_lengths) > 1:
         raise ValueError(f"Sequence lengths do not match: {seq_lengths}")
 
-    actual_length = seq_lengths.pop()
+    actual_length = seq_lengths.pop() if seq_lengths else 0
     if actual_length != num_loci:
         raise ValueError(
             f"Alignment length ({actual_length}) does not match "
@@ -110,6 +127,12 @@ def filter_core_snp(
         else:
             keep[idx] = False
 
+    logger.info(
+        "Kept %d out of %d positions with threshold=%d%%",
+        kept_positions,
+        num_loci,
+        threshold,
+    )
     typer.echo(f"Kept {kept_positions} out of {num_loci} positions "
                f"(threshold: {threshold}%)")
 
@@ -155,4 +178,5 @@ def filter_cmd(
 ) -> None:
     """Filter core SNP alignment."""
     filter_core_snp(wild_loci, alignment, threshold, output_prefix)
+    logger.info("Core SNP filtering completed: %s.fadel-InvMisF%s.bak.fa", output_prefix, threshold)
     typer.echo("Core SNP filtering completed!")

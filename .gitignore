@@ -53,11 +53,27 @@ test_data/raw/tb_h37rv.fasta
 
 # VarScan（用户自行下载）
 scripts/VarScan.v2.3.9.jar
+src/scripts/VarScan.v2.3.9.jar
 
 # 输出结果
 results/
+results_*/
+.snakemake/
 *.log
 nohup.out
+backup_candidates/
+
+# Snakemake/本地测试临时文件
+config/samplesheet.one.csv
+.ipynb_checkpoints/
+config/.ipynb_checkpoints/
+src/.ipynb_checkpoints/
+
+# Bowtie2索引（可由脚本重建，体积较大）
+data/bowtie2_index/*.bt2
+
+# 误操作产生的超大临时文件
+/-
 
 # 系统文件
 .DS_Store

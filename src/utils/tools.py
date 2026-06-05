@@ -24,6 +24,7 @@ class ToolManager:
     """Manage external bioinformatics tools."""
     
     REQUIRED_TOOLS = ["sickle", "bowtie2", "samtools", "java"]
+    OPTIONAL_TOOLS = ["fastp"]
     
     def __init__(self):
         self._tools: Dict[str, ToolInfo] = {}
@@ -31,7 +32,7 @@ class ToolManager:
     
     def _check_all(self):
         """Check all required tools."""
-        for tool in self.REQUIRED_TOOLS:
+        for tool in self.REQUIRED_TOOLS + self.OPTIONAL_TOOLS:
             path = shutil.which(tool)
             version = None
             
@@ -93,7 +94,7 @@ class ToolManager:
     def print_status(self):
         """Print tool status to logger."""
         logger.info("Tool Status:")
-        for tool in self.REQUIRED_TOOLS:
+        for tool in self.REQUIRED_TOOLS + self.OPTIONAL_TOOLS:
             info = self._tools[tool]
             status = "✓" if info.available else "✗"
             path_str = str(info.path) if info.path else "NOT FOUND"

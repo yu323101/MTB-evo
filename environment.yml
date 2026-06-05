@@ -12,14 +12,27 @@ dependencies:
   - samtools
   - varscan
   - fasttree
+  - fastp
   # Perl
   - perl
+  - snakemake-minimal
+  # Python table/report deps
+  - pandas
+  # R deps for legacy figure scripts
+  - r-base
+  - r-ggplot2
+  - r-jsonlite
+  - r-dplyr
+  - r-tidyr
+  - r-readr
+  - r-scales
   # Python packages (使用 pip 安装避免 channel 冲突)
   - pip:
     - biopython==1.81
     - typer
     - pydantic
     - pyyaml
+    - matplotlib
   # Development
   - pytest
   - black

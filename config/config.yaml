@@ -1,0 +1,40 @@
+samplesheet: config/samplesheet.csv
+results_dir: results
+python_bin: python
+cli_module: src.cli
+
+threads:
+  bowtie2: 16
+  samtools_sort: 4
+
+workflow:
+  verbose: false
+  run_id: latest
+
+report:
+  strict: false
+  skip_lineage: false
+  skip_figures: false
+  skip_tables: false
+
+references:
+  active: tb_ancestor
+  profiles:
+    tb_ancestor:
+      fasta: data/tb.ancestor.fasta
+      fai: data/tb.ancestor.fasta.fai
+      bowtie2_index: data/bowtie2_index/tb.ancestor.fasta
+      wildtype_fasta: data/tb.ancestor.fasta
+      genome_length: 4411532
+    tb_h37rv:
+      fasta: data/tb_h37rv.fasta
+      fai: data/tb_h37rv.fasta.fai
+      bowtie2_index: data/bowtie2_index/tb_h37rv.fasta
+      wildtype_fasta: data/tb_h37rv.fasta
+      genome_length: 4411532
+  ppe_list: data/PPE_INS_loci_Rv.list
+  varscan_jar: src/scripts/VarScan.v2.3.9.jar
+  lineage_rules: data/lineage/typing_SNP.tsv
+
+compat:
+  legacy_results_dir: results_legacy

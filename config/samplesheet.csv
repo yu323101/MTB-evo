@@ -1,0 +1,3 @@
+sample_id,r1,r2
+MD001.cleaned,/data/projects/nmx/test_TB_WH/MD001.cleaned_1.fastq.gz,/data/projects/nmx/test_TB_WH/MD001.cleaned_2.fastq.gz
+MD002.cleaned,/data/projects/nmx/test_TB_WH/MD002.cleaned_1.fastq.gz,/data/projects/nmx/test_TB_WH/MD002.cleaned_2.fastq.gz

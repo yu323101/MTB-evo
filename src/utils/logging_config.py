@@ -85,6 +85,11 @@ def setup_logging(
     return logger
 
 
-def get_logger() -> logging.Logger:
-    """Get the mtb_evo logger."""
-    return logging.getLogger("mtb_evo")
+def get_logger(name: Optional[str] = None) -> logging.Logger:
+    """Get the mtb_evo logger or one of its child loggers."""
+    base = logging.getLogger("mtb_evo")
+    if not name:
+        return base
+    if name.startswith("mtb_evo"):
+        return logging.getLogger(name)
+    return base.getChild(name)

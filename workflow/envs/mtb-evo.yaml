@@ -1,0 +1,21 @@
+name: mtb-evo
+channels:
+  - conda-forge
+  - bioconda
+  - defaults
+dependencies:
+  - python=3.9
+  - pip
+  - sickle-trim
+  - bowtie2
+  - samtools
+  - varscan
+  - fasttree
+  - perl
+  - snakemake-minimal
+  - pip:
+      - biopython==1.81
+      - typer
+      - pydantic
+      - pyyaml
+      - matplotlib
