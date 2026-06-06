@@ -1,4 +1,4 @@
-"""Step 3: Extract differential loci from SNP files."""
+"""Extract differential loci from SNP files."""
 
 from collections import defaultdict
 from pathlib import Path

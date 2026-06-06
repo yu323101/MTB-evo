@@ -1,4 +1,4 @@
-"""Prepare Layer B1/Layer C inputs without invoking the legacy pipeline orchestrator."""
+"""Prepare report input files from sample results and FASTQ inputs."""
 
 from __future__ import annotations
 

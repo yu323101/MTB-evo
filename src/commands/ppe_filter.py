@@ -1,8 +1,4 @@
-"""PPE and Insertion Sequence filter.
-
-This module replaces 0.1_PE_IS_filt_Rv.pl with a Python implementation.
-Filters out SNPs located in PPE regions and insertion sequences.
-"""
+"""Filter SNP records against PPE and insertion-sequence loci."""
 
 from pathlib import Path
 

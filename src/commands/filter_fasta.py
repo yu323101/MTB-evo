@@ -1,8 +1,4 @@
-"""Filter FASTA alignment based on wild-type loci and missing data threshold.
-
-This module replaces 2nd_loci_filt_fa_bak.pl with a Python implementation.
-Filters FASTA sequences based on wild-type loci and missing/ambiguous base threshold.
-"""
+"""Filter FASTA alignments by wild-type loci and missing-data thresholds."""
 
 from pathlib import Path
 from typing import Dict, List, Set

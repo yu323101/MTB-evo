@@ -1,4 +1,4 @@
-"""Prepare sample-scoped foundation outputs and downstream bridge inputs."""
+"""Prepare report input files from sample-level analysis outputs."""
 
 from __future__ import annotations
 

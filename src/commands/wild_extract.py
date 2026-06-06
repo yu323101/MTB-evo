@@ -1,4 +1,4 @@
-"""Step 6: Extract wild-type bases from ancestor sequence."""
+"""Extract wild-type bases from an ancestor sequence."""
 
 from pathlib import Path
 

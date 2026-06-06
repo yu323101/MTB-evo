@@ -1,4 +1,4 @@
-"""Compare legacy sample-level core outputs and new shared-core outputs."""
+"""Compare legacy core outputs with shared core outputs."""
 
 from __future__ import annotations
 

@@ -1,8 +1,4 @@
-"""Format transformation for VarScan output.
-
-This module replaces 1_format_trans.pl with a Python implementation.
-Converts VarScan filtered output to a standardized format.
-"""
+"""Transform filtered VarScan output into the downstream text format."""
 
 from pathlib import Path
 

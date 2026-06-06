@@ -1,4 +1,4 @@
-"""Step 5: Merge FAS files into a single alignment."""
+"""Merge recall FASTA files into a single alignment."""
 
 from pathlib import Path
 

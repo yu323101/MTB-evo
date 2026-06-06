@@ -1,4 +1,4 @@
-"""Generate table reports by orchestrating original legacy scripts."""
+"""Generate per-sample report tables."""
 
 from __future__ import annotations
 

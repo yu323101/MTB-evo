@@ -1,4 +1,4 @@
-"""Step 8: Calculate pairwise SNP distances."""
+"""Calculate pairwise SNP distances."""
 
 from pathlib import Path
 

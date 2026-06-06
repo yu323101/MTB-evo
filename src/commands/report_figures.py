@@ -1,4 +1,4 @@
-"""Generate report figures by orchestrating the original legacy scripts (01-09, PNG+PDF)."""
+"""Generate per-sample report figures."""
 
 from __future__ import annotations
 

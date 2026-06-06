@@ -1,4 +1,4 @@
-"""Build Layer D reports directly from Snakemake-style outputs (no legacy pipeline orchestrator)."""
+"""Build report outputs from pipeline results."""
 
 from __future__ import annotations
 

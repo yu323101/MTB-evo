@@ -1,4 +1,4 @@
-"""Lineage assignment (Perl-compatible with legacy lineage scripts)."""
+"""Assign lineages from SNP marker rules."""
 
 from __future__ import annotations
 

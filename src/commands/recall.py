@@ -1,4 +1,4 @@
-"""Step 4: Genotype recall from CNS files."""
+"""Recall genotypes from CNS files."""
 
 from pathlib import Path
 from typing import Dict, List, Optional, Set

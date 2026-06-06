@@ -1,17 +1,5 @@
 #!/usr/bin/env python3
-"""
-Generate SNP calling pipeline script with auto-detected tool paths.
-
-Usage: python3 pair_fixed_nostrandbias.py <strain_list.txt> [--threads N] [--sort-threads N]
-
-Example strain list format:
-MD601.cleaned
-MD602.cleaned
-
-Example samplesheet format:
-sample_id,r1,r2
-MD601.cleaned,/data/MD601.cleaned_1.fastq.gz,/data/MD601.cleaned_2.fastq.gz
-"""
+"""Generate a legacy SNP-calling shell script from sample inputs."""
 
 import argparse
 import csv
