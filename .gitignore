@@ -33,6 +33,7 @@ env/
 *~
 
 # 测试相关（保留代码，忽略输出）
+tests/
 tests/__pycache__/
 tests/*.pyc
 .pytest_cache/
