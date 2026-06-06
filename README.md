@@ -17,8 +17,6 @@ snakemake --snakefile Snakefile --configfile config/config.yaml -j 4 all
 - `downstream_only`：仅桥接输入（Layer C）
 - `reports_only`：仅报告层（Layer D）
 
-`run-all` / `run-core` / `run-from-step3` 已下线，不再作为正式入口。
-
 ## 2. 输入格式
 
 推荐使用 `config/samplesheet.csv`：
