@@ -13,7 +13,8 @@ snakemake --snakefile Snakefile --configfile config/config.yaml -j 4 all
 可选 target：
 
 - `all`：全流程（Layer A + B + C + D）
-- `core_only`：基础层（A + B）
+- `foundation_only`：基础输入层（Layer A）
+- `core_only`：核心分析层（Layer B）
 - `downstream_only`：仅桥接输入（Layer C）
 - `reports_only`：仅报告层（Layer D）
 
@@ -127,7 +128,13 @@ references:
 snakemake --snakefile Snakefile --configfile config/config.yaml -j 4 all
 ```
 
-只跑基础层（B）：
+只跑基础输入层（A）：
+
+```bash
+snakemake --snakefile Snakefile --configfile config/config.yaml -j 4 foundation_only
+```
+
+只跑核心分析层（B）：
 
 ```bash
 snakemake --snakefile Snakefile --configfile config/config.yaml -j 4 core_only

@@ -8,15 +8,18 @@ include: "rules/downstream_inputs.smk"
 include: "rules/lineage.smk"
 include: "rules/reports.smk"
 
-localrules: all, core_only, downstream_only, reports_only
+localrules: all, foundation_only, core_only, downstream_only, reports_only
 
 rule all:
     input:
         rules.build_reports.output.done,
 
-rule core_only:
+rule foundation_only:
     input:
         rules.foundation_prepare_outputs.output.done,
+
+rule core_only:
+    input:
         rules.run_core.output.done,
 
 rule downstream_only:
