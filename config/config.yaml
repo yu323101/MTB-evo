@@ -17,6 +17,10 @@ report:
   skip_figures: false
   skip_tables: false
 
+core_gate:
+  min_mean_depth: 10
+  min_coverage_fraction: 0.95
+
 references:
   active: tb_ancestor
   profiles:

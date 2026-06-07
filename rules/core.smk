@@ -90,6 +90,8 @@ rule core_depth_metrics:
         result_path("logs", "rules", "core_depth_metrics", "{sample}.log"),
     params:
         genome_length=GENOME_LENGTH,
+        min_mean_depth=int(config.get("core_gate", {}).get("min_mean_depth", 10)),
+        min_coverage_fraction=float(config.get("core_gate", {}).get("min_coverage_fraction", 0.95)),
     shell:
         r'''
         set -euo pipefail
@@ -102,7 +104,7 @@ rule core_depth_metrics:
         mean_round=$(printf '%.0f' "$mean_depth")
 
         passed=0
-        if [ "$mean_round" -ge 10 ] && awk -v c="$coverage_fraction" 'BEGIN {{exit (c>=0.95)?0:1}}'; then
+        if [ "$mean_round" -ge {params.min_mean_depth} ] && awk -v c="$coverage_fraction" 'BEGIN {{exit (c>={params.min_coverage_fraction})?0:1}}'; then
             passed=1
             msg="PASS"
         else
