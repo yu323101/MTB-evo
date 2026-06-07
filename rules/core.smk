@@ -8,6 +8,8 @@ rule core_trim_reads:
         s_trim=temp(result_path("samples", "{sample}", "alignment_qc", "{sample}_s.fastq")),
     threads:
         TRIM_READS_THREADS
+    resources:
+        trim_io=1
     log:
         result_path("logs", "rules", "core_trim_reads", "{sample}.log"),
     shell:
@@ -92,6 +94,8 @@ rule core_depth_metrics:
         status=result_path("samples", "{sample}", "alignment_qc", "core_gate_status.tsv"),
     threads:
         DEPTH_METRICS_THREADS
+    resources:
+        depth_io=1
     log:
         result_path("logs", "rules", "core_depth_metrics", "{sample}.log"),
     params:
@@ -131,6 +135,8 @@ rule core_call_variants:
         done=result_path("logs", "rules", "core_call_variants", "{sample}.done"),
     threads:
         CALL_VARIANTS_THREADS
+    resources:
+        variant_io=1
     log:
         result_path("logs", "rules", "core_call_variants", "{sample}.log"),
     params:
