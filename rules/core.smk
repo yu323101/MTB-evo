@@ -6,6 +6,8 @@ rule core_trim_reads:
         r1_trim=temp(result_path("samples", "{sample}", "alignment_qc", "{sample}_1.fastq")),
         r2_trim=temp(result_path("samples", "{sample}", "alignment_qc", "{sample}_2.fastq")),
         s_trim=temp(result_path("samples", "{sample}", "alignment_qc", "{sample}_s.fastq")),
+    threads:
+        TRIM_READS_THREADS
     log:
         result_path("logs", "rules", "core_trim_reads", "{sample}.log"),
     shell:
@@ -29,6 +31,8 @@ rule core_align_and_sort:
         s_trim=rules.core_trim_reads.output.s_trim,
     output:
         bam=result_path("samples", "{sample}", "alignment_qc", "{sample}.sort.bam"),
+    threads:
+        BOWTIE2_THREADS + SAMTOOLS_SORT_THREADS
     log:
         result_path("logs", "rules", "core_align_and_sort", "{sample}.log"),
     params:
@@ -86,6 +90,8 @@ rule core_depth_metrics:
     output:
         depth=result_path("samples", "{sample}", "report_inputs", "alignment_qc", "{sample}.depth"),
         status=result_path("samples", "{sample}", "alignment_qc", "core_gate_status.tsv"),
+    threads:
+        DEPTH_METRICS_THREADS
     log:
         result_path("logs", "rules", "core_depth_metrics", "{sample}.log"),
     params:
@@ -123,6 +129,8 @@ rule core_call_variants:
         status=rules.core_depth_metrics.output.status,
     output:
         done=result_path("logs", "rules", "core_call_variants", "{sample}.done"),
+    threads:
+        CALL_VARIANTS_THREADS
     log:
         result_path("logs", "rules", "core_call_variants", "{sample}.log"),
     params:
@@ -191,6 +199,8 @@ rule core_step3_diff_loci:
         expand(result_path("logs", "rules", "core_call_variants", "{sample}.done"), sample=SAMPLES),
     output:
         diff_loci=result_path(".core_work", "diff_loci.txt"),
+    threads:
+        DIFF_LOCI_THREADS
     log:
         result_path("logs", "rules", "core_step3_diff_loci.log"),
     params:
@@ -211,6 +221,8 @@ rule core_step4_recall:
         call_done=rules.core_call_variants.output.done,
     output:
         done=result_path("logs", "rules", "core_step4_recall", "{sample}.done"),
+    threads:
+        RECALL_THREADS
     log:
         result_path("logs", "rules", "core_step4_recall", "{sample}.log"),
     params:
@@ -245,6 +257,8 @@ rule core_step5_merge:
         expand(result_path("logs", "rules", "core_step4_recall", "{sample}.done"), sample=SAMPLES),
     output:
         merged=result_path(".core_work", "merged.fasta"),
+    threads:
+        MERGE_THREADS
     log:
         result_path("logs", "rules", "core_step5_merge.log"),
     params:
@@ -264,6 +278,8 @@ rule core_step6_wild_extract:
         diff_loci=rules.core_step3_diff_loci.output.diff_loci,
     output:
         wildtype=result_path(".core_work", "wildtype.fasta"),
+    threads:
+        WILD_EXTRACT_THREADS
     log:
         result_path("logs", "rules", "core_step6_wild_extract.log"),
     params:
@@ -289,6 +305,8 @@ rule core_step7_filter:
     output:
         core_fa=result_path(".core_work", "core_snps.fadel-InvMisF5.bak.fa"),
         core_loc=result_path(".core_work", "core_snps.fadel-InvMisF5.bak.loc"),
+    threads:
+        FILTER_CORE_THREADS
     log:
         result_path("logs", "rules", "core_step7_filter.log"),
     params:
@@ -313,6 +331,8 @@ rule core_step8_distance:
         core_fa=rules.core_step7_filter.output.core_fa,
     output:
         distance=result_path(".core_work", "distance_matrix.txt"),
+    threads:
+        DISTANCE_THREADS
     log:
         result_path("logs", "rules", "core_step8_distance.log"),
     params:
@@ -337,6 +357,8 @@ rule core_publish_outputs:
     output:
         publish_done=result_path("logs", "workflow", "core_publish.done"),
         core_outputs=CORE_OUTPUTS,
+    threads:
+        1
     log:
         result_path("logs", "rules", "core_publish_outputs.log"),
     params:
@@ -364,6 +386,8 @@ rule run_core:
         publish_done=rules.core_publish_outputs.output.publish_done,
     output:
         done=result_path("logs", "workflow", "run_core.done"),
+    threads:
+        1
     log:
         result_path("logs", "rules", "run_core.log"),
     shell:

@@ -4,8 +4,17 @@ python_bin: python
 cli_module: src.cli
 
 threads:
+  trim_reads: 1
   bowtie2: 16
   samtools_sort: 4
+  depth_metrics: 1
+  call_variants: 1
+  diff_loci: 1
+  recall: 1
+  merge: 1
+  wild_extract: 1
+  filter_core: 1
+  distance: 1
 
 workflow:
   verbose: false
