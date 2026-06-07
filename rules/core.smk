@@ -200,7 +200,7 @@ rule core_call_variants:
         '''
 
 
-rule core_step3_diff_loci:
+rule core_collect_diff_loci:
     input:
         expand(result_path("logs", "rules", "core_call_variants", "{sample}.done"), sample=SAMPLES),
     output:
@@ -208,7 +208,7 @@ rule core_step3_diff_loci:
     threads:
         DIFF_LOCI_THREADS
     log:
-        result_path("logs", "rules", "core_step3_diff_loci.log"),
+        result_path("logs", "rules", "core_collect_diff_loci.log"),
     params:
         python_bin=PYTHON_BIN,
         cli_module=CLI_MODULE,
@@ -221,16 +221,16 @@ rule core_step3_diff_loci:
         '''
 
 
-rule core_step4_recall:
+rule core_recall_consensus:
     input:
-        diff_loci=rules.core_step3_diff_loci.output.diff_loci,
+        diff_loci=rules.core_collect_diff_loci.output.diff_loci,
         call_done=rules.core_call_variants.output.done,
     output:
-        done=result_path("logs", "rules", "core_step4_recall", "{sample}.done"),
+        done=result_path("logs", "rules", "core_recall_consensus", "{sample}.done"),
     threads:
         RECALL_THREADS
     log:
-        result_path("logs", "rules", "core_step4_recall", "{sample}.log"),
+        result_path("logs", "rules", "core_recall_consensus", "{sample}.log"),
     params:
         python_bin=PYTHON_BIN,
         cli_module=CLI_MODULE,
@@ -258,15 +258,15 @@ rule core_step4_recall:
         '''
 
 
-rule core_step5_merge:
+rule core_merge_recall_fasta:
     input:
-        expand(result_path("logs", "rules", "core_step4_recall", "{sample}.done"), sample=SAMPLES),
+        expand(result_path("logs", "rules", "core_recall_consensus", "{sample}.done"), sample=SAMPLES),
     output:
         merged=result_path(".core_work", "merged.fasta"),
     threads:
         MERGE_THREADS
     log:
-        result_path("logs", "rules", "core_step5_merge.log"),
+        result_path("logs", "rules", "core_merge_recall_fasta.log"),
     params:
         python_bin=PYTHON_BIN,
         cli_module=CLI_MODULE,
@@ -279,15 +279,15 @@ rule core_step5_merge:
         '''
 
 
-rule core_step6_wild_extract:
+rule core_extract_wildtype_loci:
     input:
-        diff_loci=rules.core_step3_diff_loci.output.diff_loci,
+        diff_loci=rules.core_collect_diff_loci.output.diff_loci,
     output:
         wildtype=result_path(".core_work", "wildtype.fasta"),
     threads:
         WILD_EXTRACT_THREADS
     log:
-        result_path("logs", "rules", "core_step6_wild_extract.log"),
+        result_path("logs", "rules", "core_extract_wildtype_loci.log"),
     params:
         python_bin=PYTHON_BIN,
         cli_module=CLI_MODULE,
@@ -304,17 +304,17 @@ rule core_step6_wild_extract:
         '''
 
 
-rule core_step7_filter:
+rule core_filter_alignment:
     input:
-        wild_loci=rules.core_step6_wild_extract.output.wildtype,
-        merged=rules.core_step5_merge.output.merged,
+        wild_loci=rules.core_extract_wildtype_loci.output.wildtype,
+        merged=rules.core_merge_recall_fasta.output.merged,
     output:
         core_fa=result_path(".core_work", "core_snps.fadel-InvMisF5.bak.fa"),
         core_loc=result_path(".core_work", "core_snps.fadel-InvMisF5.bak.loc"),
     threads:
         FILTER_CORE_THREADS
     log:
-        result_path("logs", "rules", "core_step7_filter.log"),
+        result_path("logs", "rules", "core_filter_alignment.log"),
     params:
         python_bin=PYTHON_BIN,
         cli_module=CLI_MODULE,
@@ -332,15 +332,15 @@ rule core_step7_filter:
         '''
 
 
-rule core_step8_distance:
+rule core_compute_distance:
     input:
-        core_fa=rules.core_step7_filter.output.core_fa,
+        core_fa=rules.core_filter_alignment.output.core_fa,
     output:
         distance=result_path(".core_work", "distance_matrix.txt"),
     threads:
         DISTANCE_THREADS
     log:
-        result_path("logs", "rules", "core_step8_distance.log"),
+        result_path("logs", "rules", "core_compute_distance.log"),
     params:
         python_bin=PYTHON_BIN,
         cli_module=CLI_MODULE,
@@ -354,12 +354,12 @@ rule core_step8_distance:
 
 rule core_publish_outputs:
     input:
-        diff_loci=rules.core_step3_diff_loci.output.diff_loci,
-        merged=rules.core_step5_merge.output.merged,
-        wildtype=rules.core_step6_wild_extract.output.wildtype,
-        core_fa=rules.core_step7_filter.output.core_fa,
-        core_loc=rules.core_step7_filter.output.core_loc,
-        distance=rules.core_step8_distance.output.distance,
+        diff_loci=rules.core_collect_diff_loci.output.diff_loci,
+        merged=rules.core_merge_recall_fasta.output.merged,
+        wildtype=rules.core_extract_wildtype_loci.output.wildtype,
+        core_fa=rules.core_filter_alignment.output.core_fa,
+        core_loc=rules.core_filter_alignment.output.core_loc,
+        distance=rules.core_compute_distance.output.distance,
     output:
         publish_done=result_path("logs", "workflow", "core_publish.done"),
         core_outputs=CORE_OUTPUTS,
