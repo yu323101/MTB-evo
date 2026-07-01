@@ -170,9 +170,6 @@ rule core_call_variants:
         if [ "$passed" = "1" ]; then
             min_cov=$(printf '%.0f' "$mean_depth")
             min_cov=$(( min_cov / 10 ))
-            if [ "$min_cov" -lt 5 ]; then
-                min_cov=5
-            fi
 
             samtools mpileup -q 30 -Q 30 -Bf "{params.ref_fasta}" "{input.bam}" > "$pileup" 2>> {log}
             java -jar "{params.varscan_jar}" mpileup2snp "$pileup" \

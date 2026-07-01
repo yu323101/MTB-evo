@@ -409,11 +409,7 @@ a=$(($(echo $depth | awk '{{printf ("%.f",$1)}}')))
 if [ "$a" -ge 10 ] && (echo ${{coverage}} 0.95 | awk '!($1>=$2){{exit 1}}'); then
 	{tools['samtools']} mpileup -q 30 -Q 30 -Bf {ref_fasta} $RESULTS_DIR/{strain_name}.sort.bam > $RESULTS_DIR/{strain_name}.pileup
 	b=$(($(echo $depth | awk '{{printf ("%.f",$1)}}')/10))
-	if [ $b -lt 5 ]; then
-		{tools['java']} -jar {varscan_jar} mpileup2snp $RESULTS_DIR/{strain_name}.pileup --min-coverage 5 --min-reads2 2 --min-avg-qual 30 --min-var-freq 0.75 --p-value 99e-02 > $RESULTS_DIR/{strain_name}.varscan
-	else
-		{tools['java']} -jar {varscan_jar} mpileup2snp $RESULTS_DIR/{strain_name}.pileup --min-coverage $b --min-reads2 2 --min-avg-qual 30 --min-var-freq 0.75 --p-value 99e-02 > $RESULTS_DIR/{strain_name}.varscan
-	fi
+	{tools['java']} -jar {varscan_jar} mpileup2snp $RESULTS_DIR/{strain_name}.pileup --min-coverage $b --min-reads2 2 --min-avg-qual 30 --min-var-freq 0.75 --p-value 99e-02 > $RESULTS_DIR/{strain_name}.varscan
 	{tools['java']} -jar {varscan_jar} mpileup2cns $RESULTS_DIR/{strain_name}.pileup --min-coverage 3 --min-avg-qual 20 --min-var-freq 0.75 --strand-filter 0 --min-reads2 2 > $RESULTS_DIR/{strain_name}.cns
 	awk -F '[:]' '{{if($9==0 || $10==0)$0="";else print $0}}' $RESULTS_DIR/{strain_name}.varscan > $RESULTS_DIR/{strain_name}.vars
 	mtb-evo ppe-filter --ppe-list {ppe_list} --input $RESULTS_DIR/{strain_name}.vars --output $RESULTS_DIR/{strain_name}.var.ppe
