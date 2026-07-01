@@ -75,7 +75,7 @@ def recall_genotype(
             freq_str = info[4]
 
             # Filter 1: Only single base (filter indels)
-            if len(cons) != 1:
+            if len(var) != 1:
                 genotype[pos] = "N"
                 continue
 
